@@ -99,6 +99,9 @@ func singleCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient 
 		return fmt.Errorf("commit")
 	}
 
+	// Show files that will be committed
+	printChangedFiles(gitClient, cmd.Context(), mode)
+
 	ui.PrintCommitMessage(result.Message, outputLevel())
 
 	if dryRun {
@@ -161,8 +164,12 @@ func commitInteractionLoop(cmd *cobra.Command, svc *services.CommitService, gitC
 
 		switch choice {
 		case ui.ConfirmYes:
+			if err := ensureStagedForCommit(cmd, gitClient, mode); err != nil {
+				return err
+			}
 			if err := gitClient.Commit(cmd.Context(), msg); err != nil {
-				return fmt.Errorf("committing: %w", err)
+				ui.PrintError(fmt.Sprintf("Failed to commit: %s", err.Error()))
+				return fmt.Errorf("commit")
 			}
 			ui.PrintSuccess("Committed successfully.")
 			return nil
@@ -170,14 +177,19 @@ func commitInteractionLoop(cmd *cobra.Command, svc *services.CommitService, gitC
 		case ui.ConfirmEdit:
 			edited, err := ui.OpenEditor(msg.String())
 			if err != nil {
-				return fmt.Errorf("editing: %w", err)
+				ui.PrintError(fmt.Sprintf("Editing failed: %s", err.Error()))
+				return fmt.Errorf("edit")
 			}
 			if edited == "" || edited == msg.String() {
 				continue
 			}
 			parsed := parseEditedMessage(edited)
+			if err := ensureStagedForCommit(cmd, gitClient, mode); err != nil {
+				return err
+			}
 			if err := gitClient.Commit(cmd.Context(), parsed); err != nil {
-				return fmt.Errorf("committing: %w", err)
+				ui.PrintError(fmt.Sprintf("Failed to commit: %s", err.Error()))
+				return fmt.Errorf("commit")
 			}
 			ui.PrintSuccess("Committed with edits.")
 			return nil
@@ -210,11 +222,16 @@ func commitInteractionLoop(cmd *cobra.Command, svc *services.CommitService, gitC
 				ui.PrintWarning("Max regeneration attempts reached.")
 				edited, err := ui.OpenEditor(msg.String())
 				if err != nil {
-					return err
+					ui.PrintError(fmt.Sprintf("Editing failed: %s", err.Error()))
+					return fmt.Errorf("edit")
 				}
 				parsed := parseEditedMessage(edited)
+				if err := ensureStagedForCommit(cmd, gitClient, mode); err != nil {
+					return err
+				}
 				if err := gitClient.Commit(cmd.Context(), parsed); err != nil {
-					return fmt.Errorf("committing: %w", err)
+					ui.PrintError(fmt.Sprintf("Failed to commit: %s", err.Error()))
+					return fmt.Errorf("commit")
 				}
 				ui.PrintSuccess("Committed with edits.")
 				return nil
@@ -391,6 +408,94 @@ func modeLabel(mode services.CommitMode) string {
 		return "unstaged changes"
 	default:
 		return "changes"
+	}
+}
+
+// printChangedFiles shows the files that will be committed.
+func printChangedFiles(gitClient *git.ExecClient, ctx context.Context, mode services.CommitMode) {
+	switch mode {
+	case services.CommitModeStaged:
+		status, err := gitClient.Status(ctx)
+		if err == nil && !status.IsEmpty {
+			fmt.Println()
+			ui.PrintInfo("Staged files:")
+			for _, f := range status.Files {
+				fmt.Printf("  - %s\n", f)
+			}
+		}
+
+	case services.CommitModeUnstaged:
+		unstaged, err := gitClient.UnstagedStatus(ctx)
+		if err == nil && !unstaged.IsEmpty {
+			fmt.Println()
+			ui.PrintInfo("Unstaged files:")
+			for _, f := range unstaged.Files {
+				fmt.Printf("  - %s\n", f)
+			}
+		}
+
+	default: // CommitModeAuto
+		// Show staged if any, otherwise unstaged
+		status, err := gitClient.Status(ctx)
+		if err == nil && !status.IsEmpty {
+			fmt.Println()
+			ui.PrintInfo("Files:")
+			for _, f := range status.Files {
+				fmt.Printf("  - %s\n", f)
+			}
+			return
+		}
+		unstaged, err := gitClient.UnstagedStatus(ctx)
+		if err == nil && !unstaged.IsEmpty {
+			fmt.Println()
+			ui.PrintInfo("Unstaged files:")
+			for _, f := range unstaged.Files {
+				fmt.Printf("  - %s\n", f)
+			}
+		}
+	}
+}
+
+// ensureStagedForCommit ensures the correct files are staged before committing.
+// Behavior depends on the mode:
+//   --staged:   commit only what's already staged (no change)
+//   --unstaged: unstage everything, then stage only the unstaged files
+//   auto:       stage everything before committing
+func ensureStagedForCommit(cmd *cobra.Command, gitClient *git.ExecClient, mode services.CommitMode) error {
+	switch mode {
+	case services.CommitModeStaged:
+		// Commit only what's already staged — don't stage anything new.
+		return nil
+
+	case services.CommitModeUnstaged:
+		// Capture unstaged files BEFORE unstaging, so we only re-stage
+		// the originally-unstaged files — not any that were already staged.
+		unstaged, err := gitClient.UnstagedStatus(cmd.Context())
+		if err != nil {
+			ui.PrintError(fmt.Sprintf("Failed to get unstaged files: %s", err.Error()))
+			return fmt.Errorf("stage")
+		}
+		// Now unstage everything.
+		if err := gitClient.UnstageAll(cmd.Context()); err != nil {
+			ui.PrintError(fmt.Sprintf("Failed to unstage: %s", err.Error()))
+			return fmt.Errorf("stage")
+		}
+		// Then stage only the files that were unstaged.
+		if len(unstaged.Files) > 0 {
+			if err := gitClient.Stage(cmd.Context(), unstaged.Files); err != nil {
+				ui.PrintError(fmt.Sprintf("Failed to stage unstaged files: %s", err.Error()))
+				return fmt.Errorf("stage")
+			}
+		}
+		return nil
+
+	default: // CommitModeAuto
+		// Stage everything before committing.
+		if err := gitClient.StageAll(cmd.Context()); err != nil {
+			ui.PrintError(fmt.Sprintf("Failed to stage changes: %s", err.Error()))
+			return fmt.Errorf("stage")
+		}
+		return nil
 	}
 }
 

@@ -311,6 +311,12 @@ func (c *ExecClient) Stage(ctx context.Context, files []string) error {
 	return err
 }
 
+// StageAll stages all changes (tracked modified, deleted, and untracked files).
+func (c *ExecClient) StageAll(ctx context.Context) error {
+	_, err := c.run(ctx, "add", "-A")
+	return err
+}
+
 // UnstageAll removes all files from the staging area.
 func (c *ExecClient) UnstageAll(ctx context.Context) error {
 	_, err := c.run(ctx, "reset", "HEAD", "--quiet")

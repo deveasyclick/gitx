@@ -40,6 +40,9 @@ type Client interface {
 	// Stage adds specific files to the staging area.
 	Stage(ctx context.Context, files []string) error
 
+	// StageAll stages all changes (tracked modified, deleted, and untracked).
+	StageAll(ctx context.Context) error
+
 	// UnstageAll removes all files from the staging area.
 	UnstageAll(ctx context.Context) error
 }
