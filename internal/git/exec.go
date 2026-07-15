@@ -198,14 +198,17 @@ func (c *ExecClient) Status(ctx context.Context) (StagedChanges, error) {
 
 	var files []string
 	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
+		// Format: "XY filename" — X=index status, Y=worktree status, then space, then filename
+		// "M  main.go"  — staged only
+		// " M main.go"  — unstaged only (not matched here)
+		// "MM main.go"  — both staged and unstaged
+		// "?? file.go"  — untracked (not matched)
+		if len(line) < 4 || line[2] != ' ' {
 			continue
 		}
-		// Staged files start with a non-space status character
-		// e.g. "M  main.go", "A  new.go"
-		if len(line) > 1 && line[0] != ' ' && line[0] != '?' {
-			files = append(files, strings.TrimSpace(line[2:]))
+		x := line[0]
+		if x != ' ' && x != '?' {
+			files = append(files, strings.TrimSpace(line[3:]))
 		}
 	}
 
@@ -225,26 +228,24 @@ func (c *ExecClient) UnstagedStatus(ctx context.Context) (StagedChanges, error) 
 
 	var files []string
 	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
+		// Format: "XY filename" — X=index status, Y=worktree status, then space, then filename
+		// " M main.go"  — unstaged only
+		// "MM main.go"  — both staged and unstaged
+		// " D old.go"   — unstaged delete
+		// "?? file.go"  — untracked (not matched here)
+		if len(line) < 4 || line[2] != ' ' {
 			continue
 		}
-		// Any file with a worktree status (column 2) is unstaged:
-		//   " M main.go"  — unstaged only
-		//   "MM main.go"  — both staged and unstaged
-		//   " D old.go"   — unstaged delete
-		// Exclude untracked "??" since git diff doesn't cover them.
-		if len(line) > 1 && line[1] != ' ' && line[0] != '?' {
-			files = append(files, strings.TrimSpace(line[2:]))
+		x, y := line[0], line[1]
+		if y != ' ' && x != '?' {
+			files = append(files, strings.TrimSpace(line[3:]))
 		}
 	}
 
-	// Also check for untracked files separately since "git diff" won't cover them
-	// but the user might still want to know about them.
+	// Also check for untracked files separately since "git diff" won't cover them.
 	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "?? ") {
-			files = append(files, strings.TrimPrefix(line, "?? "))
+		if len(line) >= 4 && line[0] == '?' && line[1] == '?' && line[2] == ' ' {
+			files = append(files, strings.TrimSpace(line[3:]))
 		}
 	}
 
