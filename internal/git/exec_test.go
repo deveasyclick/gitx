@@ -374,6 +374,139 @@ func TestExecClient_RepoInfo(t *testing.T) {
 	}
 }
 
+func TestExecClient_UnstageAll_NothingStaged(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// No commits, no staged files — UnstageAll should be a no-op.
+	// This previously failed with "pathspec '.' did not match any files".
+	err := client.UnstageAll(ctx)
+	if err != nil {
+		t.Fatalf("UnstageAll on empty repo (no commits, nothing staged): %v", err)
+	}
+}
+
+func TestExecClient_UnstageAll_StagedWithoutCommit(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Stage files without making a commit (no HEAD yet)
+	gitWriteFile(t, dir, "main.go", "package main\n")
+	gitAdd(t, dir)
+
+	// Verify files are staged
+	status, err := client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if status.IsEmpty {
+		t.Fatal("expected files to be staged")
+	}
+
+	// Unstage them
+	err = client.UnstageAll(ctx)
+	if err != nil {
+		t.Fatalf("UnstageAll with staged files (no HEAD): %v", err)
+	}
+
+	// Verify files are unstaged
+	status, err = client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status after unstage: %v", err)
+	}
+	if !status.IsEmpty {
+		t.Errorf("expected clean status after UnstageAll, got %v", status.Files)
+	}
+}
+
+func TestExecClient_UnstageAll_StagedWithCommit(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Make an initial commit (creates HEAD)
+	gitWriteFile(t, dir, "a.go", "package a\n")
+	gitAdd(t, dir)
+	gitCommit(t, dir, "initial")
+
+	// Make more changes and stage them
+	gitWriteFile(t, dir, "b.go", "package b\n")
+	gitAdd(t, dir)
+
+	status, err := client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if status.IsEmpty {
+		t.Fatal("expected files to be staged")
+	}
+
+	// Unstage via HEAD reset
+	err = client.UnstageAll(ctx)
+	if err != nil {
+		t.Fatalf("UnstageAll with HEAD: %v", err)
+	}
+
+	status, err = client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status after unstage: %v", err)
+	}
+	if !status.IsEmpty {
+		t.Errorf("expected clean status after UnstageAll, got %v", status.Files)
+	}
+}
+
+func TestExecClient_Stage(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	gitWriteFile(t, dir, "a.go", "package a\n")
+	gitWriteFile(t, dir, "sub/b.go", "package b\n")
+
+	// Stage specific files
+	err := client.Stage(ctx, []string{"a.go"})
+	if err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+
+	status, err := client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(status.Files) != 1 || status.Files[0] != "a.go" {
+		t.Errorf("expected only a.go to be staged, got %v", status.Files)
+	}
+
+	// Stage additional files
+	err = client.Stage(ctx, []string{"sub/b.go"})
+	if err != nil {
+		t.Fatalf("Stage second file: %v", err)
+	}
+
+	status, err = client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(status.Files) != 2 {
+		t.Errorf("expected 2 staged files, got %v", status.Files)
+	}
+}
+
+func TestExecClient_Stage_EmptyFiles(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Stage with empty file list should be a no-op
+	err := client.Stage(ctx, []string{})
+	if err != nil {
+		t.Fatalf("Stage with empty list: %v", err)
+	}
+}
+
 func TestExecClient_Diff(t *testing.T) {
 	dir := gitInit(t)
 	client := NewExecClient(dir)
@@ -401,5 +534,149 @@ func TestExecClient_Diff(t *testing.T) {
 	// Could also be "feature.go" if git diff main...HEAD shows the right files
 	if len(change.Files) < 1 {
 		t.Errorf("expected at least 1 file, got %v", change.Files)
+	}
+}
+
+func TestExecClient_Status_UnstagedOnly(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Create a commit so we have HEAD
+	gitWriteFile(t, dir, "main.go", "package main\n")
+	gitAdd(t, dir)
+	gitCommit(t, dir, "initial")
+
+	// Modify the file WITHOUT staging the change — should be " M main.go"
+	gitWriteFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
+
+	// Status should NOT see it as staged (only column 2 is modified)
+	status, err := client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !status.IsEmpty {
+		t.Errorf("expected no staged files, got %v", status.Files)
+	}
+
+	// UnstagedStatus SHOULD see it
+	unstaged, err := client.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus: %v", err)
+	}
+	if unstaged.IsEmpty {
+		t.Fatal("expected unstaged changes after file modification")
+	}
+	if len(unstaged.Files) != 1 || unstaged.Files[0] != "main.go" {
+		t.Errorf("unstaged files = %v, want [main.go]", unstaged.Files)
+	}
+}
+
+func TestExecClient_Status_MixedStagedAndUnstaged(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Create a commit so we have HEAD
+	gitWriteFile(t, dir, "a.go", "package a\n")
+	gitAdd(t, dir)
+	gitCommit(t, dir, "initial")
+
+	// Stage a change to a.go — "M  a.go"
+	gitWriteFile(t, dir, "a.go", "package a\n\nfunc A() {}\n")
+	gitAdd(t, dir)
+
+	// Modify a.go again without staging — creates "MM a.go" (staged + unstaged)
+	gitWriteFile(t, dir, "a.go", "package a\n\n// comment\nfunc A() {}\n")
+
+	// Status: MM is counted as staged (first column is M)
+	status, err := client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if status.IsEmpty {
+		t.Fatal("expected staged files for MM entry")
+	}
+	if len(status.Files) != 1 || status.Files[0] != "a.go" {
+		t.Fatalf("expected [a.go], got %v", status.Files)
+	}
+
+	// UnstagedStatus: MM is also counted as unstaged (second column is M)
+	unstaged, err := client.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus: %v", err)
+	}
+	if unstaged.IsEmpty {
+		t.Fatal("expected unstaged changes for MM entry")
+	}
+	if len(unstaged.Files) != 1 || unstaged.Files[0] != "a.go" {
+		t.Errorf("unstaged files = %v, want [a.go]", unstaged.Files)
+	}
+}
+
+func TestExecClient_StageAll(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Create a commit so we have HEAD
+	gitWriteFile(t, dir, "main.go", "package main\n")
+	gitAdd(t, dir)
+	gitCommit(t, dir, "initial")
+
+	// Modify tracked file and add untracked file
+	gitWriteFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
+	gitWriteFile(t, dir, "new.go", "package new\n")
+
+	// Nothing staged yet
+	status, err := client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status before StageAll: %v", err)
+	}
+	if !status.IsEmpty {
+		t.Fatal("expected clean status before StageAll")
+	}
+
+	// StageAll should stage both the tracked modification and the untracked file
+	err = client.StageAll(ctx)
+	if err != nil {
+		t.Fatalf("StageAll: %v", err)
+	}
+
+	status, err = client.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status after StageAll: %v", err)
+	}
+	if status.IsEmpty {
+		t.Fatal("expected files to be staged after StageAll")
+	}
+	if len(status.Files) != 2 {
+		t.Fatalf("expected 2 staged files, got %v", status.Files)
+	}
+}
+
+func TestExecClient_UnstagedStatus_Untracked(t *testing.T) {
+	dir := gitInit(t)
+	client := NewExecClient(dir)
+	ctx := context.Background()
+
+	// Create a commit so we have HEAD
+	gitWriteFile(t, dir, "main.go", "package main\n")
+	gitAdd(t, dir)
+	gitCommit(t, dir, "initial")
+
+	// Add an untracked file
+	gitWriteFile(t, dir, "new.go", "package new\n")
+
+	// UnstagedStatus should include the untracked file
+	unstaged, err := client.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus: %v", err)
+	}
+	if unstaged.IsEmpty {
+		t.Fatal("expected untracked file in unstaged status")
+	}
+	if len(unstaged.Files) != 1 || unstaged.Files[0] != "new.go" {
+		t.Errorf("unstaged files = %v, want [new.go]", unstaged.Files)
 	}
 }

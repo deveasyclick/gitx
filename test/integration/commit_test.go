@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/user/gitx/internal/ai"
+	"github.com/user/gitx/internal/domain"
 	"github.com/user/gitx/internal/git"
 	"github.com/user/gitx/internal/prompts"
 	"github.com/user/gitx/internal/services"
@@ -293,6 +295,275 @@ func TestCommitIntegration_NoStagedChanges(t *testing.T) {
 	_, err := svc.Generate(context.Background(), services.CommitModeStaged)
 	if err == nil {
 		t.Fatal("expected error for no staged changes")
+	}
+}
+
+// TestCommitIntegration_UnstagedMode verifies that --unstaged correctly unstages
+// previously staged files and stages only the originally-unstaged files.
+func TestCommitIntegration_UnstagedMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	repoDir := gitInit(t)
+
+	// Initial commit so HEAD exists
+	writeFile(t, repoDir, "README.md", "# Project\n")
+	gitAdd(t, repoDir)
+	runGit(t, repoDir, "commit", "-m", "initial commit")
+
+	// Create two tracked files
+	writeFile(t, repoDir, "staged.go", `package main
+
+const Staged = "staged"
+`)
+	writeFile(t, repoDir, "unstaged.go", `package main
+
+const Unstaged = "unstaged"
+`)
+	gitAdd(t, repoDir)
+	runGit(t, repoDir, "commit", "-m", "add staged.go and unstaged.go")
+
+	// Modify staged.go and stage it
+	writeFile(t, repoDir, "staged.go", `package main
+
+const Staged = "staged-modified"
+`)
+	runGit(t, repoDir, "add", "staged.go")
+
+	// Modify unstaged.go but do NOT stage it
+	writeFile(t, repoDir, "unstaged.go", `package main
+
+const Unstaged = "unstaged-modified"
+`)
+
+	gitClient := git.NewExecClient(repoDir)
+	ctx := context.Background()
+
+	// Verify initial state: staged.go is staged, unstaged.go is unstaged
+	status, err := gitClient.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(status.Files) != 1 || status.Files[0] != "staged.go" {
+		t.Fatalf("expected [staged.go] staged, got %v", status.Files)
+	}
+
+	unstagedStatus, err := gitClient.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus: %v", err)
+	}
+	if len(unstagedStatus.Files) != 1 || unstagedStatus.Files[0] != "unstaged.go" {
+		t.Fatalf("expected [unstaged.go] unstaged, got %v", unstagedStatus.Files)
+	}
+
+	// Execute the fixed logic from ensureStagedForCommit (CommitModeUnstaged):
+	//   1. Capture unstaged files BEFORE unstaging
+	//   2. Unstage everything
+	//   3. Stage only the originally-unstaged files
+	unstaged, err := gitClient.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus (capture): %v", err)
+	}
+
+	if err := gitClient.UnstageAll(ctx); err != nil {
+		t.Fatalf("UnstageAll: %v", err)
+	}
+
+	if len(unstaged.Files) > 0 {
+		if err := gitClient.Stage(ctx, unstaged.Files); err != nil {
+			t.Fatalf("Stage: %v", err)
+		}
+	}
+
+	// Verify: only unstaged.go should be staged now; staged.go should NOT be staged
+	status, err = gitClient.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status after: %v", err)
+	}
+	if len(status.Files) != 1 || status.Files[0] != "unstaged.go" {
+		t.Fatalf("expected [unstaged.go] staged after fix, got %v", status.Files)
+	}
+
+	// Verify the commit only contains the unstaged change
+	commitMsg := "test: add unstaged file"
+	if err := gitClient.Commit(ctx, domain.CommitMessage{
+		Title: commitMsg,
+		Body:  "",
+		Style: "conventional",
+	}); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	// Verify only unstaged.go is in the commit
+	diff, err := gitClient.Diff(ctx, "HEAD~1")
+	if err != nil {
+		t.Fatalf("Diff: %v", err)
+	}
+	if len(diff.Files) != 1 || diff.Files[0] != "unstaged.go" {
+		t.Fatalf("expected commit to contain [unstaged.go], got %v", diff.Files)
+	}
+}
+
+// TestCommitIntegration_UnstagedMode_WithStagedOnly verifies that when there are
+// only staged changes (no unstaged), --unstaged unstages everything and leaves
+// nothing staged (no changes to commit).
+func TestCommitIntegration_UnstagedMode_WithStagedOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	repoDir := gitInit(t)
+
+	// Initial commit so HEAD exists
+	writeFile(t, repoDir, "README.md", "# Project\n")
+	gitAdd(t, repoDir)
+	runGit(t, repoDir, "commit", "-m", "initial commit")
+
+	// Create a file and stage it
+	writeFile(t, repoDir, "only-staged.go", `package main
+
+const OnlyStaged = "staged"
+`)
+	gitAdd(t, repoDir)
+
+	gitClient := git.NewExecClient(repoDir)
+	ctx := context.Background()
+
+	// Verify only-staged.go is staged
+	status, err := gitClient.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(status.Files) != 1 || status.Files[0] != "only-staged.go" {
+		t.Fatalf("expected [only-staged.go] staged, got %v", status.Files)
+	}
+
+	// Verify no unstaged changes
+	unstaged, err := gitClient.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus: %v", err)
+	}
+	if !unstaged.IsEmpty {
+		t.Fatalf("expected no unstaged files, got %v", unstaged.Files)
+	}
+
+	// Execute the fixed logic: capture unstaged (empty), unstage all, stage nothing
+	if err := gitClient.UnstageAll(ctx); err != nil {
+		t.Fatalf("UnstageAll: %v", err)
+	}
+
+	// Nothing to re-stage since there were no unstaged files
+
+	// Verify staging area is now empty
+	status, err = gitClient.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status after: %v", err)
+	}
+	if !status.IsEmpty {
+		t.Fatalf("expected empty staging area after unstage, got %v", status.Files)
+	}
+}
+
+// TestCommitIntegration_UnstagedMode_WithBothStagedAndUnstagedSameFile tests the
+// edge case where a file has BOTH staged and unstaged changes ("MM" in git status).
+// The unstaged portion should still be captured and re-staged.
+func TestCommitIntegration_UnstagedMode_WithBothStagedAndUnstagedSameFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	repoDir := gitInit(t)
+
+	// Initial commit so HEAD exists
+	writeFile(t, repoDir, "README.md", "# Project\n")
+	gitAdd(t, repoDir)
+	runGit(t, repoDir, "commit", "-m", "initial commit")
+
+	// Create a file and commit it
+	writeFile(t, repoDir, "shared.go", `package main
+
+const Value = "v1"
+`)
+	gitAdd(t, repoDir)
+	runGit(t, repoDir, "commit", "-m", "add shared.go")
+
+	// Modify shared.go and stage it (first modification)
+	writeFile(t, repoDir, "shared.go", `package main
+
+const Value = "v2"
+`)
+	runGit(t, repoDir, "add", "shared.go")
+
+	// Modify shared.go again WITHOUT staging (second modification)
+	writeFile(t, repoDir, "shared.go", `package main
+
+const Value = "v3"
+`)
+
+	gitClient := git.NewExecClient(repoDir)
+	ctx := context.Background()
+
+	// Verify: shared.go has both staged (v2) and unstaged (v3) changes
+	status, err := gitClient.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(status.Files) != 1 || status.Files[0] != "shared.go" {
+		t.Fatalf("expected [shared.go] staged, got %v", status.Files)
+	}
+
+	unstaged, err := gitClient.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus: %v", err)
+	}
+	if len(unstaged.Files) != 1 || unstaged.Files[0] != "shared.go" {
+		t.Fatalf("expected [shared.go] in unstaged, got %v", unstaged.Files)
+	}
+
+	// Execute the fixed logic
+	captured, err := gitClient.UnstagedStatus(ctx)
+	if err != nil {
+		t.Fatalf("UnstagedStatus (capture): %v", err)
+	}
+
+	if err := gitClient.UnstageAll(ctx); err != nil {
+		t.Fatalf("UnstageAll: %v", err)
+	}
+
+	if len(captured.Files) > 0 {
+		if err := gitClient.Stage(ctx, captured.Files); err != nil {
+			t.Fatalf("Stage: %v", err)
+		}
+	}
+
+	// Verify: shared.go is still staged (it had unstaged changes, so it should be re-staged)
+	status, err = gitClient.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status after: %v", err)
+	}
+	if len(status.Files) != 1 || status.Files[0] != "shared.go" {
+		t.Fatalf("expected [shared.go] staged after fix (it had unstaged changes), got %v", status.Files)
+	}
+
+	// Verify the committed content is v3 (the latest working-tree version, not the old staged v2)
+	if err := gitClient.Commit(ctx, domain.CommitMessage{
+		Title: "test: update shared.go",
+		Body:  "",
+		Style: "conventional",
+	}); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	// Read the committed file content
+	showCmd := exec.Command("git", "show", "HEAD:shared.go")
+	showCmd.Dir = repoDir
+	out, err := showCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git show: %v", err)
+	}
+	if !strings.Contains(string(out), `"v3"`) {
+		t.Fatalf("expected committed content to contain v3, got:\n%s", out)
 	}
 }
 

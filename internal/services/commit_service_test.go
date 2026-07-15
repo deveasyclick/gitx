@@ -133,6 +133,113 @@ func TestCleanResponse(t *testing.T) {
 	}
 }
 
+func TestCommitService_GenerateGrouped_MultipleDirectories(t *testing.T) {
+	diff := `diff --git a/api/handler.go b/api/handler.go
+index abc..def 100644
+--- a/api/handler.go
++++ b/api/handler.go
+@@ -1 +1 @@
+-func old() {}
++func new() {}
+diff --git a/ui/button.go b/ui/button.go
+index 123..456 100644
+--- a/ui/button.go
++++ b/ui/button.go
+@@ -1 +1 @@
+-old button
++new button`
+
+	svc := NewCommitService(
+		&mockGit{
+			status: git.StagedChanges{IsEmpty: true},
+			unstagedStatus: git.StagedChanges{Files: []string{"api/handler.go", "ui/button.go"}, IsEmpty: false},
+			diff:   domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
+			repo:   domain.RepoInfo{CurrentBranch: "main"},
+		},
+		&mockAI{text: "feat: update component"},
+		prompts.NewCommitBuilder(),
+	)
+
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeAuto)
+	if err != nil {
+		t.Fatalf("GenerateGrouped: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(result.Results))
+	}
+
+	// First group should be api
+	if result.Results[0].Dir != "api" {
+		t.Errorf("group[0].Dir = %q, want %q", result.Results[0].Dir, "api")
+	}
+	if len(result.Results[0].Files) != 1 || result.Results[0].Files[0] != "api/handler.go" {
+		t.Errorf("group[0].Files = %v, want [api/handler.go]", result.Results[0].Files)
+	}
+	if result.Results[0].Message.Title != "feat: update component" {
+		t.Errorf("group[0].Message.Title = %q", result.Results[0].Message.Title)
+	}
+
+	// Second group should be ui
+	if result.Results[1].Dir != "ui" {
+		t.Errorf("group[1].Dir = %q, want %q", result.Results[1].Dir, "ui")
+	}
+	if len(result.Results[1].Files) != 1 || result.Results[1].Files[0] != "ui/button.go" {
+		t.Errorf("group[1].Files = %v, want [ui/button.go]", result.Results[1].Files)
+	}
+}
+
+func TestCommitService_GenerateGrouped_NoChanges(t *testing.T) {
+	svc := NewCommitService(
+		&mockGit{
+			status:  git.StagedChanges{IsEmpty: true},
+			unstagedStatus: git.StagedChanges{IsEmpty: true},
+		},
+		&mockAI{},
+		prompts.NewCommitBuilder(),
+	)
+
+	_, err := svc.GenerateGrouped(context.Background(), CommitModeAuto)
+	if err == nil {
+		t.Fatal("expected error for no changes")
+	}
+}
+
+func TestCommitService_GenerateGrouped_RootFiles(t *testing.T) {
+	diff := `diff --git a/main.go b/main.go
+index abc..def 100644
+--- a/main.go
++++ b/main.go
+@@ -1 +1 @@
+-old
++new`
+
+	svc := NewCommitService(
+		&mockGit{
+			status:  git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
+			diff:   domain.Change{Files: []string{"main.go"}, Diff: diff},
+			repo:   domain.RepoInfo{CurrentBranch: "main"},
+		},
+		&mockAI{text: "feat: update main"},
+		prompts.NewCommitBuilder(),
+	)
+
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeStaged)
+	if err != nil {
+		t.Fatalf("GenerateGrouped: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(result.Results))
+	}
+	if result.Results[0].Dir != "." {
+		t.Errorf("Dir = %q, want %q", result.Results[0].Dir, ".")
+	}
+	if len(result.Results[0].Files) != 1 || result.Results[0].Files[0] != "main.go" {
+		t.Errorf("Files = %v, want [main.go]", result.Results[0].Files)
+	}
+}
+
 func TestCut(t *testing.T) {
 	before, after, found := cut("a\n\nb", "\n\n")
 	if !found || before != "a" || after != "b" {
@@ -148,12 +255,13 @@ func TestCut(t *testing.T) {
 // --- Mocks ---
 
 type mockGit struct {
-	status git.StagedChanges
-	diff   domain.Change
-	repo   domain.RepoInfo
-	log    []git.CommitLog
-	tags   []string
-	err    error
+	status         git.StagedChanges
+	unstagedStatus git.StagedChanges
+	diff           domain.Change
+	repo           domain.RepoInfo
+	log            []git.CommitLog
+	tags           []string
+	err            error
 }
 
 func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error) { return m.diff, m.err }
@@ -162,10 +270,11 @@ func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error) { ret
 func (m *mockGit) Log(_ context.Context, _, _ string) ([]git.CommitLog, error) { return m.log, m.err }
 func (m *mockGit) Commit(_ context.Context, _ domain.CommitMessage) error { return m.err }
 func (m *mockGit) Status(_ context.Context) (git.StagedChanges, error) { return m.status, m.err }
-func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) { return m.status, m.err }
+func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) { return m.unstagedStatus, m.err }
 func (m *mockGit) Tags(_ context.Context) ([]string, error) { return m.tags, m.err }
 func (m *mockGit) RepoInfo(_ context.Context) (domain.RepoInfo, error) { return m.repo, m.err }
 func (m *mockGit) Stage(_ context.Context, _ []string) error { return m.err }
+func (m *mockGit) StageAll(_ context.Context) error { return m.err }
 func (m *mockGit) UnstageAll(_ context.Context) error { return m.err }
 
 type mockAI struct {
