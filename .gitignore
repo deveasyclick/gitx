@@ -1,0 +1,13 @@
+.pi/**/*
+
+
+# binary
+gitx
+.env
+
+# air live-reload
+tmp/
+build-errors.log
+
+# project config may contain API keys
+.gitx/config.yaml
