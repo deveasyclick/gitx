@@ -158,7 +158,7 @@ Generate a commit message from changes.
 gitx commit                     # Auto: staged first, unstaged fallback
 gitx commit --staged            # Staged only (error if empty)
 gitx commit --unstaged          # Unstaged only (error if empty)
-gitx commit --dry-run           # Generate but do not commit
+gitx commit --group             # Split changes by directory into separate commits
 gitx commit --provider ollama   # Override AI provider
 gitx commit --model llama3      # Override AI model
 gitx commit --group             # Split changes by directory into separate commits
@@ -377,7 +377,7 @@ flowchart TD
     end
 
     subgraph AI [AI Layer - internal/ai]
-        Provider[Provider Interface\nGenerate(ctx, Request)]
+        Provider[Provider Interface]
         OpenAI[OpenAI Provider]
         DeepSeek[DeepSeek Provider]
         Named[NamedProvider\nwrapper for name]
@@ -431,7 +431,7 @@ flowchart TD
 User runs: gitx commit
                 │
     ┌───────────┴───────────┐
-    │   1. CLI parses flags  │  --staged, --unstaged, --dry-run
+    │   1. CLI parses flags  │  --staged, --unstaged
     │   resolveCommitMode()  │  auto → staged → unstaged fallback
     └───────────┬───────────┘
                 │
