@@ -7,7 +7,7 @@ GitX is an AI-powered command-line Git assistant that improves developer product
 ## Features
 
 - **`gitx commit`** — Generate commit messages from staged or unstaged changes with interactive confirmation
-- **`gitx pr`** — Generate structured pull request descriptions from branch diffs and commit history
+- **`gitx describe`** — Describe the current repository state (commits, staged, and/or unstaged changes)
 - **`gitx changelog`** — Generate changelog entries from git tags and commits
 - **`gitx setup`** — Interactive configuration: pick provider, model, and API key
 - **`gitx config`** — Manage configuration (provider, model, API key, commit style)
@@ -61,10 +61,14 @@ git add .
 gitx commit
 ```
 
-### 3. Generate a PR description
+### 3. Describe the current branch
 
 ```bash
-gitx pr --base main
+gitx describe                    # Last 10 commits
+gitx describe --base main        # All commits since main
+gitx describe --staged           # Include staged changes
+gitx describe --unstaged         # Include unstaged changes
+gitx describe --output state.md  # Write to file
 ```
 
 ### 4. Generate a changelog
@@ -193,22 +197,26 @@ Commit this change?
 
 **Copy to clipboard** requires a clipboard tool (`pbcopy` on macOS, `wl-copy` on Wayland, `xsel` or `xclip` on X11). `gitx doctor` checks for one and `gitx setup` can install it for you.
 
-### `gitx pr`
+### `gitx describe`
 
-Generate a pull request description.
+Describe the current state of the repository.
 
 ```bash
-gitx pr                         # Compare against main (default)
-gitx pr --base develop          # Compare against develop
-gitx pr --output pr.md          # Write to file
+gitx describe                        # Last 10 commits
+gitx describe --staged               # Include staged changes
+gitx describe --unstaged             # Include unstaged changes
+gitx describe --base develop         # All commits since develop
+gitx describe --staged --unstaged    # Full picture
+gitx describe --output state.md      # Write to file
 ```
 
 **Output sections:**
-- Summary
-- Changes (bullet points)
-- Testing
-- Risks
-- Breaking Changes
+- Overview
+- Commits
+- Staged Changes (if present)
+- Unstaged Changes (if present)
+
+Use `--output` to write the description to a file.
 
 ### `gitx changelog`
 
@@ -351,13 +359,13 @@ GitX follows a layered architecture with clear separation of concerns. Each laye
 ```mermaid
 flowchart TD
     subgraph CLI [CLI Layer - internal/cli]
-        Cmd[Commands\ncommit / pr / changelog\nsetup / config / doctor]
+        Cmd[Commands\ncommit / describe / changelog\nsetup / config / doctor]
         Flags[Flag Parsing\n--staged / --unstaged\n--provider / --model]
     end
 
     subgraph Services [Services Layer - internal/services]
         CommitSvc[CommitService]
-        PRSvc[PRService]
+        DescribeSvc[DescribeService]
         ChangelogSvc[ChangelogService]
     end
 
@@ -376,7 +384,7 @@ flowchart TD
 
     subgraph Prompts [Prompts Layer - internal/prompts]
         CommitPrompt[CommitBuilder]
-        PRPrompt[PRBuilder]
+        DescribePrompt[DescribeBuilder]
         ChangelogPrompt[ChangelogBuilder]
     end
 
@@ -403,8 +411,8 @@ flowchart TD
     CommitSvc --> AI
     CommitSvc --> Security
     CommitSvc --> Prompts
-    PRSvc --> Git
-    PRSvc --> AI
+    DescribeSvc --> Git
+    DescribeSvc --> AI
     ChangelogSvc --> Git
     ChangelogSvc --> AI
     Client --> Exec
@@ -573,7 +581,7 @@ type RepoInfo struct {       // Repository metadata
 }
 ```
 
-The central concept is **Change** — file modifications from git. Commit messages, PR descriptions, and changelogs are all different presentations derived from this same underlying data.
+The central concept is **Change** — file modifications from git. Commit messages, describe output, and changelogs are all different presentations derived from this same underlying data.
 
 ## Development
 
@@ -649,7 +657,7 @@ docs/                         # Documentation
 ### Current
 
 - [x] `gitx commit` — Generate commit messages from staged/unstaged changes
-- [x] `gitx pr` — Generate pull request descriptions
+- [x] `gitx describe` — Describe repository state (commits, staged, unstaged)
 - [x] `gitx changelog` — Generate changelog entries
 - [x] `gitx setup` — Interactive configuration wizard
 - [x] `gitx config` — Manage configuration
