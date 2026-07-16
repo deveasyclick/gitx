@@ -122,7 +122,7 @@ GitX uses a single config file at `~/.config/gitx/config.yaml`:
 ai:
   provider: deepseek
   model: deepseek-v4-flash
-  api_key: sk-...           # optional; also accepted from env vars
+  api_key: sk-...
 commit:
   style: conventional       # conventional or gitmoji
 ```
@@ -133,27 +133,8 @@ commit:
 |-----|---------|-------------|
 | `ai.provider` | `openai` | AI provider (`openai`, `deepseek`, `anthropic`, `google`, `openrouter`, `ollama`) |
 | `ai.model` | `gpt-5-mini` | Model name (provider-specific) |
-| `ai.api_key` | — | API key (also accepted from environment variables) |
+| `ai.api_key` | — | API key |
 | `commit.style` | `conventional` | Commit style (`conventional`, `gitmoji`) |
-
-### Environment variables
-
-| Variable | Purpose |
-|----------|---------|
-| `GITX_OPENAI_API_KEY` | OpenAI API key |
-| `GITX_DEEPSEEK_API_KEY` | DeepSeek API key |
-| `GITX_ANTHROPIC_API_KEY` | Anthropic API key |
-| `GITX_PROVIDER` | Override AI provider (takes precedence over config) |
-| `GITX_MODEL` | Override AI model (takes precedence over config) |
-| `GITX_OLLAMA_URL` | Ollama base URL (default: `http://localhost:11434`) |
-
-### Resolution order
-
-1. Environment variables (`GITX_PROVIDER`, `GITX_MODEL`)
-2. Config file (`~/.config/gitx/config.yaml`)
-3. Built-in defaults
-
-API keys are resolved from the config file first, then environment variables.
 
 ## Command Reference
 
@@ -297,14 +278,14 @@ Machine-readable JSON output for scripts and CI pipelines.
 
 ### Supported providers
 
-| Provider | Env Variable | Default Model | API Format |
-|----------|-------------|---------------|------------|
-| OpenAI | `GITX_OPENAI_API_KEY` | `gpt-5-mini` | OpenAI Chat Completions |
-| DeepSeek | `GITX_DEEPSEEK_API_KEY` | `deepseek-v4-flash` | OpenAI-compatible |
-| Anthropic | `GITX_ANTHROPIC_API_KEY` | `claude-sonnet-4-5` | OpenAI-compatible |
-| Google | — | `gemini-2.5-pro` | OpenAI-compatible |
-| OpenRouter | `GITX_OPENROUTER_API_KEY` | `openrouter/auto` | OpenAI-compatible |
-| Ollama | `GITX_OLLAMA_URL` | `llama3` | OpenAI-compatible |
+| Provider | Default Model |
+|----------|---------------|
+| OpenAI | `gpt-5-mini` |
+| DeepSeek | `deepseek-v4-flash` |
+| Anthropic | `claude-sonnet-4-5` |
+| Google | `gemini-2.5-pro` |
+| OpenRouter | `openrouter/auto` |
+| Ollama | `llama3` |
 
 ### Known models by provider
 
@@ -341,7 +322,7 @@ Before sending diffs to AI providers, GitX scans for common secrets and redacts 
 
 ### API key storage
 
-API keys can be stored in `~/.config/gitx/config.yaml` or set as environment variables. The config file is created with restricted permissions (`0600`) when an API key is written.
+API keys are stored in `~/.config/gitx/config.yaml`. The config file is created with restricted permissions (`0600`) when an API key is written.
 
 ### Safety guarantees
 
@@ -422,7 +403,6 @@ flowchart TD
     DeepSeek --> Named
     Compat -->|HTTP POST| API[AI Provider API]
     Load --> File
-    Load --> Env
 ```
 
 ### Data Flow: `gitx commit`
@@ -437,7 +417,7 @@ User runs: gitx commit
                 │
     ┌───────────┴───────────┐
     │   2. Load config       │  ~/.config/gitx/config.yaml
-    │   NewProvider(cfg)     │  resolves API key (config → env)
+    │   NewProvider(cfg)     │  reads API key from config
     └───────────┬───────────┘
                 │
     ┌───────────┴───────────┐
@@ -487,7 +467,7 @@ User runs: gitx commit
 | **Git** | `internal/git/` | Git operations via `os/exec`. No AI knowledge | `Client` interface, `ExecClient`, `StagedChanges` |
 | **AI** | `internal/ai/` | Provider interface + implementations | `Provider` interface, `Request`, `Response` |
 | **Prompts** | `internal/prompts/` | Template builders with `Builder[T]` interface | `Builder[T]`, `CommitPromptInput` |
-| **Config** | `internal/config/` | Config load/save, env var resolution | `Config`, `AIConfig`, `Save/Load` |
+| **Config** | `internal/config/` | Config load/save | `Config`, `AIConfig`, `Save/Load` |
 | **Security** | `internal/security/` | Secret scanning before AI requests | `Scan()`, `Pattern` |
 | **UI** | `internal/ui/` | Output formatting, interactive prompts, spinner | `Spinner`, `ConfirmCommit()`, `CopyToClipboard()` |
 | **Domain** | `internal/domain/` | Core models shared across layers | `Change`, `CommitMessage`, `RepoInfo` |
@@ -500,7 +480,7 @@ User runs: gitx commit
 ├── ai:
 │   ├── provider: string    # openai, deepseek, etc.
 │   ├── model: string       # model name
-│   └── api_key: string     # API key (optional, also from env)
+│   └── api_key: string     # API key
 └── commit:
     └── style: string       # conventional, gitmoji
 ```
@@ -508,9 +488,9 @@ User runs: gitx commit
 Resolution order:
 1. `DefaultConfig()` — hardcoded defaults
 2. `Load()` — reads `~/.config/gitx/config.yaml`, merges over defaults
-3. `applyEnvOverrides()` — `GITX_PROVIDER`, `GITX_MODEL` override config
+3. Config file (`~/.config/gitx/config.yaml`)
 
-API keys: `cfg.APIKey` → `config.ResolveAPIKey()` (env var) → error
+API keys: `cfg.APIKey` → used directly
 
 ### Git layer
 
@@ -647,10 +627,9 @@ docs/                         # Documentation
 
 1. Create `internal/ai/myprovider.go` with the implementation
 2. Add the config entry in `internal/ai/factory.go`
-3. Add the env variable in `internal/config/env.go`
-4. Add the secret pattern in `internal/security/patterns.go`
-5. Add known models in `internal/config/config.go`
-6. Write tests
+3. Add the secret pattern in `internal/security/patterns.go`
+4. Add known models in `internal/config/config.go`
+5. Write tests
 
 ## Roadmap
 
