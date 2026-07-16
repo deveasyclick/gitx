@@ -48,6 +48,9 @@ func init() {
 	rootCmd.AddCommand(newSetupCmd())
 	rootCmd.AddCommand(newDoctorCmd())
 
+	// Disable the built-in completion command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
 	// Silence usage on errors so we print the error message directly
 	rootCmd.SilenceUsage = true
 	rootCmd.SilenceErrors = true
