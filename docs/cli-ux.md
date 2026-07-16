@@ -301,26 +301,6 @@ Maximum:
 
 ## Flags
 
-### --dry-run
-
-Generate but do not commit.
-
-Example:
-
-```
-gitx commit --dry-run
-```
-
-Output:
-
-```
-Generated commit:
-
-feat(auth): add OAuth support
-```
-
----
-
 ### --provider
 
 Override AI provider.
