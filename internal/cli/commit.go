@@ -41,7 +41,6 @@ Use --group to split changes by directory into separate commits.`,
 		},
 	}
 
-	cmd.Flags().BoolVar(&flags.dryRun, "dry-run", false, "generate but do not commit")
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "override AI provider")
 	cmd.Flags().StringVar(&flags.model, "model", "", "override AI model")
 	cmd.Flags().BoolVar(&flags.staged, "staged", false, "use only staged changes")
@@ -77,14 +76,14 @@ func commitRun(cmd *cobra.Command, flags commitFlags) error {
 	modeLabel := modeLabel(mode)
 
 	if flags.group {
-		return groupedCommitRun(cmd, svc, gitClient, mode, modeLabel, flags.dryRun)
+		return groupedCommitRun(cmd, svc, gitClient, mode, modeLabel)
 	}
 
-	return singleCommitRun(cmd, svc, gitClient, mode, modeLabel, flags.dryRun)
+	return singleCommitRun(cmd, svc, gitClient, mode, modeLabel)
 }
 
 // singleCommitRun handles the standard single commit flow.
-func singleCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient *git.ExecClient, mode services.CommitMode, modeLabel string, dryRun bool) error {
+func singleCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient *git.ExecClient, mode services.CommitMode, modeLabel string) error {
 	spinner := ui.NewSpinner(fmt.Sprintf("Generating commit from %s...", modeLabel))
 	if ui.IsInteractive() {
 		spinner.Start()
@@ -104,15 +103,11 @@ func singleCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient 
 
 	ui.PrintCommitMessage(result.Message, outputLevel())
 
-	if dryRun {
-		return nil
-	}
-
 	return commitInteractionLoop(cmd, svc, gitClient, mode, result.Message)
 }
 
 // groupedCommitRun handles the grouped commit flow.
-func groupedCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient *git.ExecClient, mode services.CommitMode, modeLabel string, dryRun bool) error {
+func groupedCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient *git.ExecClient, mode services.CommitMode, modeLabel string) error {
 	spinner := ui.NewSpinner(fmt.Sprintf("Grouping and generating commits from %s...", modeLabel))
 	if ui.IsInteractive() {
 		spinner.Start()
@@ -147,10 +142,6 @@ func groupedCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient
 			fmt.Printf("      %s\n", bodyPreview)
 		}
 		fmt.Println()
-	}
-
-	if dryRun {
-		return nil
 	}
 
 	// Let user choose a group to work with
