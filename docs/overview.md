@@ -8,7 +8,7 @@ It extends Git with intelligent workflows for:
 
 - generating commit messages
 - splitting changes into logical commits
-- generating pull request descriptions
+- describing repository state
 - generating changelogs
 - reviewing changes
 - explaining diffs

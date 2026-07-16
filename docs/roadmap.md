@@ -14,7 +14,7 @@ Required:
 
 [x] Commit generation
 
-[x] PR generation
+[x] Describe generation
 
 [x] Changelog generation
 

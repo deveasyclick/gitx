@@ -77,32 +77,37 @@ Never:
 
 ---
 
-# gitx pr
+# gitx describe
 
-Generate pull request description.
+Describe current repository state.
 
 
-Input:
+Input (commits by default, opt-in for staged/unstaged):
 
-- current branch
-- commit history
-- diff against base branch
+- recent commits (last 10, or all since --base)
+- staged changes (--staged)
+- unstaged changes (--unstaged)
 
 
 Output:
 
 
-## Summary
+## Overview
 
-## Changes
+## Commits
 
-## Testing
+## Staged Changes
 
-## Risks
-
-## Breaking Changes
+## Unstaged Changes
 
 
+Flags:
+
+- --commits   number of recent commits (default 10)
+- --staged    include staged changes
+- --unstaged  include unstaged changes
+- --base      base branch for commit comparison
+- --output    write to file
 
 ---
 

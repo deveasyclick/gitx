@@ -147,6 +147,7 @@
   <div class="nav-links">
     <a href="#install">Install</a>
     <a href="#commands">Commands</a>
+    <a href="#aliases">Aliases</a>
     <a href="#config">Config</a>
     <a href="#providers">Providers</a>
     <a href="https://github.com/user/gitx">GitHub</a>
@@ -170,7 +171,7 @@
 <section id="quickstart">
   <h2><a href="#quickstart">Quick Start</a></h2>
   <pre><span class="c"># Install</span>
-go install github.com/deveasyclick/gitx/cmd/gitx@latest
+curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
 
 <span class="c"># Run setup (picks provider, model, API key)</span>
 gitx setup
@@ -189,6 +190,9 @@ gitx changelog --latest</pre>
 <!-- Install -->
 <section id="install">
   <h2><a href="#install">Installation</a></h2>
+
+  <h3>Quick install (macOS / Linux)</h3>
+  <pre>curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh</pre>
 
   <h3>From source</h3>
   <pre>git clone https://github.com/user/gitx
@@ -378,7 +382,36 @@ commit:
 <span class="c">UI</span>                Spinner · Interactive prompts · Clipboard · Editor</pre>
 </section>
 
+<!-- Git Aliases -->
+<section id="aliases">
+  <h2><a href="#aliases">Git Aliases</a></h2>
+  <p>GitX ships with a set of recommended git aliases for daily use. Install them optionally:</p>
 
+  <pre>sh scripts/git-aliases.sh --install</pre>
+
+  <p>Or add them manually with <code>git config --global</code>:</p>
+
+  <pre><span class="c"># gitx aliases</span>
+[alias]
+  gbc  = branch --show-current
+  gbd  = branch -D
+  gc   = checkout
+  gcn  = checkout -b
+  glo  = log --oneline --graph
+  gpc  = push -u origin HEAD
+  gpcf = push --force-with-lease origin HEAD</pre>
+
+  <table>
+    <tr><th>Alias</th><th>Command</th><th>Description</th></tr>
+    <tr><td><code>gbc</code></td><td><code>git branch --show-current</code></td><td>Show current branch name</td></tr>
+    <tr><td><code>gbd</code></td><td><code>git branch -D &lt;branch&gt;</code></td><td>Delete a branch</td></tr>
+    <tr><td><code>gc</code></td><td><code>git checkout &lt;branch&gt;</code></td><td>Checkout existing branch</td></tr>
+    <tr><td><code>gcn</code></td><td><code>git checkout -b &lt;branch&gt;</code></td><td>Checkout new branch</td></tr>
+    <tr><td><code>glo</code></td><td><code>git log --oneline --graph</code></td><td>Show compact commit log</td></tr>
+    <tr><td><code>gpc</code></td><td><code>git push -u origin HEAD</code></td><td>Push current branch (set upstream)</td></tr>
+    <tr><td><code>gpcf</code></td><td><code>git push --force-with-lease origin HEAD</code></td><td>Force push current branch safely</td></tr>
+  </table>
+</section>
 
 </div>
 

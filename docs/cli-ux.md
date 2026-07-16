@@ -145,13 +145,15 @@ Available commands:
 ```
 gitx commit
 
-gitx pr
+gitx describe
 
 gitx changelog
 
 gitx config
 
 gitx doctor
+
+gitx setup
 ```
 
 Future:
@@ -343,16 +345,21 @@ gitx commit --model llama3
 
 ---
 
-# Command: gitx pr
+# Command: gitx describe
 
 ## Purpose
 
-Generate pull request description.
+Describe the current repository state.
 
 Usage:
 
 ```
-gitx pr
+gitx describe
+gitx describe --staged
+gitx describe --unstaged
+gitx describe --base main
+gitx describe --commits 5
+gitx describe --output state.md
 ```
 
 ---
@@ -361,70 +368,51 @@ gitx pr
 
 GitX collects:
 
-* current branch
-* commit history
-* diff against base branch
+* recent commits (last 10, or all since --base)
+* staged changes (--staged)
+* unstaged changes (--unstaged)
 
 ---
 
 ## Output
 
 ```
-Pull Request Description
+## Overview
+
+Working on payment retry support.
 
 
-## Summary
-
-Adds payment retry support.
-
-
-## Changes
+## Commits
 
 - Added retry service
 - Improved provider handling
-
-
-## Testing
-
-- Unit tests added
-
-
-## Risks
-
-None identified
 ```
 
 ---
 
 ## Flags
 
+### --commits / -c
+
+Number of recent commits to include.
+
+Default: 10
+
+### --staged / -s
+
+Include staged changes.
+
+### --unstaged / -u
+
+Include unstaged changes.
+
 ### --base
 
-Specify base branch.
+Base branch for commit comparison.
 
-Example:
-
-```
-gitx pr --base develop
-```
-
-Default:
-
-```
-main
-```
-
----
-
-### --output
+### --output / -o
 
 Write to file.
-
-Example:
-
-```
-gitx pr --output pr.md
-```
 
 ---
 
