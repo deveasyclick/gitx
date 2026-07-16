@@ -141,31 +141,6 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestEnvOverrides(t *testing.T) {
-	home := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	oldProvider := os.Getenv("GITX_PROVIDER")
-	oldModel := os.Getenv("GITX_MODEL")
-	os.Setenv("HOME", home)
-	os.Setenv("GITX_PROVIDER", "anthropic")
-	os.Setenv("GITX_MODEL", "claude-haiku-3-5")
-	defer func() {
-		os.Setenv("HOME", oldHome)
-		os.Setenv("GITX_PROVIDER", oldProvider)
-		os.Setenv("GITX_MODEL", oldModel)
-	}()
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.AI.Provider != "anthropic" {
-		t.Errorf("env override provider = %q, want %q", cfg.AI.Provider, "anthropic")
-	}
-	if cfg.AI.Model != "claude-haiku-3-5" {
-		t.Errorf("env override model = %q, want %q", cfg.AI.Model, "claude-haiku-3-5")
-	}
-}
 
 func TestKnownModels(t *testing.T) {
 	tests := []struct {

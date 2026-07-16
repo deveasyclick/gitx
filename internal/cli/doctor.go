@@ -183,14 +183,12 @@ func checkAIProvider() checkResult {
 		}
 	}
 
-	hasKey := cfg.AI.APIKey != "" || config.HasAPIKey(cfg.AI.Provider)
-	if !hasKey {
-		envVar := config.EnvAPIKeyVar(cfg.AI.Provider)
+	if cfg.AI.APIKey == "" {
 		return checkResult{
 			name:   "AI provider configured",
 			status: "✗",
-			detail: fmt.Sprintf("%s not set", envVar),
-			fix:    fmt.Sprintf("Run: gitx setup  or  export %s=<your-key>", envVar),
+			detail: "API key not set",
+			fix:    "Run: gitx setup",
 		}
 	}
 

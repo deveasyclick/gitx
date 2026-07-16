@@ -120,9 +120,6 @@ func Load() (*Config, error) {
 		cfg.Merge(fileCfg)
 	}
 
-	// Environment variable overrides
-	applyEnvOverrides(cfg)
-
 	return cfg, nil
 }
 
@@ -145,15 +142,7 @@ func (c *Config) Merge(other *Config) {
 	}
 }
 
-// applyEnvOverrides checks GITX_PROVIDER and GITX_MODEL environment variables.
-func applyEnvOverrides(cfg *Config) {
-	if v := os.Getenv("GITX_PROVIDER"); v != "" {
-		cfg.AI.Provider = v
-	}
-	if v := os.Getenv("GITX_MODEL"); v != "" {
-		cfg.AI.Model = v
-	}
-}
+
 
 // Save writes cfg to ~/.config/gitx/config.yaml, creating parent directories as needed.
 func Save(cfg *Config) error {
@@ -163,7 +152,7 @@ func Save(cfg *Config) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating config directory %s: %w", dir, err)
 	}
 
@@ -178,6 +167,11 @@ func Save(cfg *Config) error {
 
 	if err := v.WriteConfig(); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
+	}
+
+	// Restrict permissions so only the owner can read the file (contains API key).
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("setting config file permissions: %w", err)
 	}
 
 	return nil

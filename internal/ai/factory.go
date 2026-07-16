@@ -7,17 +7,13 @@ import (
 )
 
 // NewProvider creates a provider based on the configuration.
-// API keys are resolved from config file first, then environment variables.
+// API keys must be set in the config file or passed by the caller.
 func NewProvider(cfg config.AIConfig) (Provider, error) {
 	apiKey := cfg.APIKey
 	if apiKey == "" {
-		apiKey = config.ResolveAPIKey(cfg.Provider)
-	}
-	if apiKey == "" {
 		return nil, fmt.Errorf(
-			"%s API key not found: set %s or use 'gitx setup'",
+			"%s API key not found: run 'gitx setup' to configure it",
 			cfg.Provider,
-			config.EnvAPIKeyVar(cfg.Provider),
 		)
 	}
 

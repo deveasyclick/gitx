@@ -277,8 +277,6 @@ func promptModel(reader *bufio.Reader, provider string) (string, error) {
 
 // promptAPIKey asks for an API key. Shows existing key if present.
 func promptAPIKey(reader *bufio.Reader, provider string, existingKey string) (string, error) {
-	envVar := config.EnvAPIKeyVar(provider)
-
 	if existingKey != "" {
 		masked := existingKey[:4] + "..." + existingKey[len(existingKey)-4:]
 		keep, err := promptConfirm(reader, fmt.Sprintf(
@@ -292,21 +290,6 @@ func promptAPIKey(reader *bufio.Reader, provider string, existingKey string) (st
 		}
 	}
 
-	// Also check env var
-	envKey := config.ResolveAPIKey(provider)
-	if envKey != "" && existingKey == "" {
-		masked := envKey[:4] + "..." + envKey[len(envKey)-4:]
-		useEnv, err := promptConfirm(reader, fmt.Sprintf(
-			"Use API key from %s (%s)?", envVar, masked,
-		))
-		if err != nil {
-			return "", err
-		}
-		if useEnv {
-			return "", nil // leave empty; env var will be used at runtime
-		}
-	}
-
 	fmt.Printf("Enter your %s API key (or press Enter to skip): ", provider)
 	input, err := reader.ReadString('\n')
 	if err != nil {
@@ -315,7 +298,6 @@ func promptAPIKey(reader *bufio.Reader, provider string, existingKey string) (st
 	input = strings.TrimSpace(input)
 
 	if input == "" {
-		fmt.Printf("No API key set. You can set %s later as an environment variable.\n", envVar)
 		return "", nil
 	}
 
