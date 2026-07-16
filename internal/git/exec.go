@@ -174,6 +174,17 @@ func (c *ExecClient) Log(ctx context.Context, from, to string) ([]CommitLog, err
 	return parseCommitLog(out), nil
 }
 
+// RecentCommits returns the last n commits from the given ref.
+// Uses --max-count to avoid errors when the ref has fewer than n commits.
+func (c *ExecClient) RecentCommits(ctx context.Context, n int, ref string) ([]CommitLog, error) {
+	out, err := c.run(ctx, "log", fmt.Sprintf("--max-count=%d", n), ref,
+		"--format=%H|%an|%ai|%s")
+	if err != nil {
+		return nil, err
+	}
+	return parseCommitLog(out), nil
+}
+
 // Commit creates a commit using the given message.
 func (c *ExecClient) Commit(ctx context.Context, msg domain.CommitMessage) error {
 	if err := msg.Validate(); err != nil {

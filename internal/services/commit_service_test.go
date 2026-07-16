@@ -268,6 +268,7 @@ func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error) { return 
 func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error) { return m.diff, m.err }
 func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error) { return m.diff, m.err }
 func (m *mockGit) Log(_ context.Context, _, _ string) ([]git.CommitLog, error) { return m.log, m.err }
+func (m *mockGit) RecentCommits(_ context.Context, _ int, _ string) ([]git.CommitLog, error) { return m.log, m.err }
 func (m *mockGit) Commit(_ context.Context, _ domain.CommitMessage) error { return m.err }
 func (m *mockGit) Status(_ context.Context) (git.StagedChanges, error) { return m.status, m.err }
 func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) { return m.unstagedStatus, m.err }

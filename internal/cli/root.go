@@ -42,7 +42,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 
 	rootCmd.AddCommand(newCommitCmd())
-	rootCmd.AddCommand(newPRCmd())
+	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newChangelogCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newSetupCmd())

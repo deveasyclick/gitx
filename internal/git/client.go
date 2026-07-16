@@ -22,6 +22,10 @@ type Client interface {
 	// Use "HEAD" for to when generating PR descriptions.
 	Log(ctx context.Context, from, to string) ([]CommitLog, error)
 
+	// RecentCommits returns the last n commits from the given ref.
+	// Safe to call even if the repo has fewer than n commits.
+	RecentCommits(ctx context.Context, n int, ref string) ([]CommitLog, error)
+
 	// Commit creates a commit with the given message.
 	Commit(ctx context.Context, msg domain.CommitMessage) error
 
