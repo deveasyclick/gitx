@@ -1,5 +1,7 @@
 .pi/**/*
 
+# Build artifacts
+/bin/
 
 # binary
 gitx

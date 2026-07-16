@@ -15,6 +15,12 @@ GitX is an AI-powered command-line Git assistant that improves developer product
 
 ## Installation
 
+### Quick install (macOS / Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+```
+
 ### From source
 
 ```bash
@@ -43,7 +49,13 @@ go install github.com/user/gitx/cmd/gitx@latest
 
 ## Quick Start
 
-### 1. Run interactive setup
+### 1. Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+```
+
+### 2. Run interactive setup
 
 ```bash
 gitx setup
@@ -51,7 +63,7 @@ gitx setup
 
 This walks you through choosing a provider, picking a model, and entering your API key. All settings are saved to `~/.config/gitx/config.yaml`.
 
-### 2. Generate a commit message
+### 3. Generate a commit message
 
 ```bash
 # Stage your changes
@@ -61,7 +73,7 @@ git add .
 gitx commit
 ```
 
-### 3. Describe the current branch
+### 4. Describe the current branch
 
 ```bash
 gitx describe                    # Last 10 commits
@@ -71,7 +83,7 @@ gitx describe --unstaged         # Include unstaged changes
 gitx describe --output state.md  # Write to file
 ```
 
-### 4. Generate a changelog
+### 5. Generate a changelog
 
 ```bash
 gitx changelog --latest
@@ -184,20 +196,29 @@ Describe the current state of the repository.
 
 ```bash
 gitx describe                        # Last 10 commits
-gitx describe --staged               # Include staged changes
-gitx describe --unstaged             # Include unstaged changes
+gitx describe --commits 5            # Last 5 commits
+gitx describe --staged               # Staged changes only
+gitx describe --unstaged             # Unstaged changes only
+gitx describe --staged --unstaged    # Full picture (staged + unstaged)
 gitx describe --base develop         # All commits since develop
-gitx describe --staged --unstaged    # Full picture
 gitx describe --output state.md      # Write to file
 ```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `-c, --commits` | Number of recent commits to include (default 10) |
+| `-s, --staged` | Include staged changes (excludes commits by default) |
+| `-u, --unstaged` | Include unstaged changes (excludes commits by default) |
+| `--base` | Base branch for commit comparison (shows all commits since this branch) |
+| `-o, --output` | Write output to a file |
 
 **Output sections:**
 - Overview
 - Commits
 - Staged Changes (if present)
 - Unstaged Changes (if present)
-
-Use `--output` to write the description to a file.
 
 ### `gitx changelog`
 
@@ -371,7 +392,6 @@ flowchart TD
 
     subgraph Config [Config Layer - internal/config]
         Load[Load / Save]
-        Env[Env resolution]
         File[~/.config/gitx/config.yaml]
     end
 
@@ -488,7 +508,6 @@ User runs: gitx commit
 Resolution order:
 1. `DefaultConfig()` — hardcoded defaults
 2. `Load()` — reads `~/.config/gitx/config.yaml`, merges over defaults
-3. Config file (`~/.config/gitx/config.yaml`)
 
 API keys: `cfg.APIKey` → used directly
 
@@ -623,6 +642,36 @@ test/
 docs/                         # Documentation
 ```
 
+### Releases with goreleaser
+
+This project uses [goreleaser](https://goreleaser.com) to cross-compile binaries, create archives, generate checksums, and publish GitHub releases.
+
+```bash
+# Install goreleaser
+# macOS: brew install goreleaser
+# Linux: see https://goreleaser.com/install
+
+# Test a dry-run release locally
+GORELEASER_KEY= goreleaser release --snapshot --clean
+
+# Create a new tag and publish
+git tag v1.0.0
+GORELEASER_KEY= goreleaser release --clean
+```
+
+The install script (`scripts/install.sh`) picks up the latest release from GitHub automatically — users install with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+```
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/install.sh` | One-liner installer: `curl ... | sh` |
+| `scripts/git-aliases.sh` | Optional git aliases: `sh scripts/git-aliases.sh --install` |
+
 ### Adding a new AI provider
 
 1. Create `internal/ai/myprovider.go` with the implementation
@@ -646,6 +695,7 @@ docs/                         # Documentation
 - [x] Interactive confirmation flows with copy to clipboard
 - [x] `gitx commit --group` — Split large changes into logical commits by directory
 - [x] Live-reload development with air
+- [x] Optional git aliases (`scripts/git-aliases.sh`) for daily workflows
 
 ### Future
 - `gitx review` — Review code changes for bugs and security issues
