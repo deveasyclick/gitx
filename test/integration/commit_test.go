@@ -192,7 +192,7 @@ func main() {}
 	}
 }
 
-func TestPRIntegration_EndToEnd(t *testing.T) {
+func TestDescribeIntegration_EndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -204,7 +204,7 @@ func TestPRIntegration_EndToEnd(t *testing.T) {
 	gitAdd(t, repoDir)
 	runGit(t, repoDir, "commit", "-m", "initial commit")
 
-	// Create a feature branch with changes
+	// Create a feature branch with commits
 	runGit(t, repoDir, "checkout", "-b", "feat/payment")
 	writeFile(t, repoDir, "payment.go", `package payment
 func Process() {}
@@ -212,24 +212,31 @@ func Process() {}
 	gitAdd(t, repoDir)
 	runGit(t, repoDir, "commit", "-m", "feat: add payment processing")
 
+	writeFile(t, repoDir, "refund.go", `package payment
+func Refund() {}
+`)
+	gitAdd(t, repoDir)
+	runGit(t, repoDir, "commit", "-m", "feat: add refund")
+
 	mockProvider := &mockAIProvider{
 		name: "openai",
-		text: "## Summary\nAdds payment processing.\n\n## Changes\n- Added Process() function\n\n## Testing\nManual testing\n\n## Risks\nNone\n\n## Breaking Changes\nNone",
+		text: "## Overview\nPayment feature complete.\n\n## Commits\n- Added payment processing\n- Added refund support",
 	}
 
 	gitClient := git.NewExecClient(repoDir)
-	svc := services.NewPRService(gitClient, mockProvider, prompts.NewPRBuilder())
+	svc := services.NewDescribeService(gitClient, mockProvider, prompts.NewDescribeBuilder())
 
-	result, err := svc.Generate(context.Background(), "main")
+	// Test with --base main (all commits since main)
+	result, err := svc.Generate(context.Background(), services.DescribeOptions{Base: "main"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 
-	if result.Description.Summary != "Adds payment processing." {
-		t.Errorf("Summary = %q", result.Description.Summary)
+	if result.Description.Overview != "Payment feature complete." {
+		t.Errorf("Overview = %q", result.Description.Overview)
 	}
-	if len(result.Description.Changes) != 1 {
-		t.Errorf("Changes = %v", result.Description.Changes)
+	if len(result.Description.Commits) != 2 {
+		t.Errorf("Commits count = %d, want 2", len(result.Description.Commits))
 	}
 }
 
