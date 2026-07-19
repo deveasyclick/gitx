@@ -4,7 +4,7 @@
 /bin/
 
 # binary
-gitx
+/gitx
 .env
 
 # air live-reload
