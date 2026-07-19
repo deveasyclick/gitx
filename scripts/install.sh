@@ -1,10 +1,10 @@
 #!/bin/sh
 # GitX installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
 
 set -eu
 
-REPO="user/gitx"
+REPO="deveasyclick/gitx"
 BIN_DIR="${GITX_INSTALL_DIR:-/usr/local/bin}"
 
 # Detect OS and arch
