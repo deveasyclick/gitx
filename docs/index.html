@@ -150,6 +150,7 @@
     <a href="#aliases">Aliases</a>
     <a href="#config">Config</a>
     <a href="#providers">Providers</a>
+    <a href="#uninstall">Uninstall</a>
     <a href="https://github.com/user/gitx">GitHub</a>
   </div>
 </nav>
@@ -409,6 +410,73 @@ commit:
     <tr><td><code>gpc</code></td><td><code>git push -u origin HEAD</code></td><td>Push current branch (set upstream)</td></tr>
     <tr><td><code>gpcf</code></td><td><code>git push --force-with-lease origin HEAD</code></td><td>Force push current branch safely</td></tr>
   </table>
+</section>
+
+<!-- Uninstall -->
+<section id="uninstall">
+  <h2><a href="#uninstall">Uninstall</a></h2>
+
+  <p>To completely remove gitx from your system, follow the steps for your platform.</p>
+
+  <h3>macOS / Linux</h3>
+
+  <h4>1. Remove the binary</h4>
+  <pre>rm -f /usr/local/bin/gitx
+
+<span class="c"># If you installed to a custom location:</span>
+rm -f "$GITX_INSTALL_DIR/gitx"</pre>
+
+  <h4>2. Remove the config file</h4>
+  <pre>rm -rf ~/.config/gitx</pre>
+
+  <h4>3. Remove git aliases</h4>
+  <pre>sh scripts/git-aliases.sh --uninstall</pre>
+  <p>Or remove them manually:</p>
+  <pre>git config --global --unset alias.gbc
+git config --global --unset alias.gbd
+git config --global --unset alias.gc
+git config --global --unset alias.gcn
+git config --global --unset alias.glo
+git config --global --unset alias.gpc
+git config --global --unset alias.gpcf</pre>
+
+  <h4>4. Verify removal</h4>
+  <pre><span class="c"># Should print "command not found"</span>
+gitx
+
+<span class="c"># Check for leftover config</span>
+ls ~/.config/gitx   <span class="c"># should show "No such file or directory"</span></pre>
+
+  <h3>Windows (PowerShell)</h3>
+
+  <h4>1. Remove the binary</h4>
+  <pre><span class="c"># Find where gitx is installed</span>
+where.exe gitx
+
+<span class="c"># Remove it (adjust path as needed)</span>
+Remove-Item C:\Users\&lt;user&gt;\bin\gitx.exe</pre>
+
+  <h4>2. Remove the config file</h4>
+  <pre>Remove-Item -Recurse -Force $env:USERPROFILE\.config\gitx</pre>
+
+  <h4>3. Remove git aliases</h4>
+  <pre>git config --global --unset alias.gbc
+git config --global --unset alias.gbd
+git config --global --unset alias.gc
+git config --global --unset alias.gcn
+git config --global --unset alias.glo
+git config --global --unset alias.gpc
+git config --global --unset alias.gpcf</pre>
+
+  <h4>4. Verify removal</h4>
+  <pre><span class="c"># Should print an error</span>
+gitx --version
+
+<span class="c"># Check for leftover config</span>
+Test-Path $env:USERPROFILE\.config\gitx   <span class="c"># should show False</span></pre>
+
+  <h3>One-liner (macOS / Linux)</h3>
+  <pre>rm -f /usr/local/bin/gitx && rm -rf ~/.config/gitx && for a in gbc gbd gc gcn glo gpc gpcf; do git config --global --unset alias.$a 2>/dev/null; done</pre>
 </section>
 
 </div>

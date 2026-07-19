@@ -18,13 +18,13 @@ GitX is an AI-powered command-line Git assistant that improves developer product
 ### Quick install (macOS / Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/user/gitx
+git clone https://github.com/deveasyclick/gitx
 cd gitx
 make build
 ```
@@ -38,7 +38,7 @@ export PATH="$PATH:$(pwd)/bin"
 ### With Go installed
 
 ```bash
-go install github.com/user/gitx/cmd/gitx@latest
+go install github.com/deveasyclick/gitx/cmd/gitx@latest
 ```
 
 ### Platform support
@@ -47,12 +47,54 @@ go install github.com/user/gitx/cmd/gitx@latest
 - macOS (amd64, arm64)
 - Windows (amd64, arm64)
 
+## Uninstall
+
+### macOS / Linux
+
+```bash
+# 1. Remove the binary
+rm -f /usr/local/bin/gitx
+
+# 2. Remove the config file and API keys
+rm -rf ~/.config/gitx
+
+# 3. Remove git aliases (if installed)
+sh scripts/git-aliases.sh --uninstall
+
+# Or remove them manually:
+# git config --global --unset alias.gbc
+# git config --global --unset alias.gbd
+# ...
+```
+
+### Windows (PowerShell)
+
+```powershell
+# 1. Find and remove the binary
+where.exe gitx
+Remove-Item C:\Users\<user>\bin\gitx.exe  # adjust path
+
+# 2. Remove the config file
+Remove-Item -Recurse -Force $env:USERPROFILE\.config\gitx
+
+# 3. Remove git aliases
+git config --global --unset alias.gbc
+git config --global --unset alias.gbd
+git config --global --unset alias.gc
+git config --global --unset alias.gcn
+git config --global --unset alias.glo
+git config --global --unset alias.gpc
+git config --global --unset alias.gpcf
+```
+
+See the full [uninstall guide](https://github.com/deveasyclick/gitx#uninstall) for details.
+
 ## Quick Start
 
 ### 1. Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
 ```
 
 ### 2. Run interactive setup
@@ -662,7 +704,7 @@ GORELEASER_KEY= goreleaser release --clean
 The install script (`scripts/install.sh`) picks up the latest release from GitHub automatically — users install with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/user/gitx/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
 ```
 
 ### Scripts
