@@ -421,9 +421,13 @@ commit:
   <h3>macOS / Linux</h3>
 
   <h4>1. Remove the binary</h4>
-  <pre>rm -f /usr/local/bin/gitx
+  <pre><span class="c"># If installed without sudo (default location)</span>
+rm -f ~/.local/bin/gitx
 
-<span class="c"># If you installed to a custom location:</span>
+<span class="c"># If installed with sudo</span>
+rm -f /usr/local/bin/gitx
+
+<span class="c"># If you specified a custom GITX_INSTALL_DIR</span>
 rm -f "$GITX_INSTALL_DIR/gitx"</pre>
 
   <h4>2. Remove the config file</h4>
@@ -476,7 +480,11 @@ gitx --version
 Test-Path $env:USERPROFILE\.config\gitx   <span class="c"># should show False</span></pre>
 
   <h3>One-liner (macOS / Linux)</h3>
-  <pre>rm -f /usr/local/bin/gitx && rm -rf ~/.config/gitx && for a in gbc gbd gc gcn glo gpc gpcf; do git config --global --unset alias.$a 2>/dev/null; done</pre>
+  <pre><span class="c"># If installed without sudo</span>
+rm -f ~/.local/bin/gitx && rm -rf ~/.config/gitx && for a in gbc gbd gc gcn glo gpc gpcf; do git config --global --unset alias.$a 2>/dev/null; done
+
+<span class="c"># If installed with sudo</span>
+rm -f /usr/local/bin/gitx && rm -rf ~/.config/gitx && for a in gbc gbd gc gcn glo gpc gpcf; do git config --global --unset alias.$a 2>/dev/null; done</pre>
 </section>
 
 </div>

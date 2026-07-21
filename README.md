@@ -18,7 +18,11 @@ GitX is an AI-powered command-line Git assistant that improves developer product
 ### Quick install (macOS / Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
+# Recommended (requires sudo for /usr/local/bin)
+curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sudo sh
+
+# User-local install (no sudo needed)
+curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | GITX_INSTALL_DIR=~/.local/bin sh
 ```
 
 ### From source
@@ -52,8 +56,9 @@ go install github.com/deveasyclick/gitx/cmd/gitx@latest
 ### macOS / Linux
 
 ```bash
-# 1. Remove the binary
-rm -f /usr/local/bin/gitx
+# 1. Remove the binary (check which directory it was installed to)
+rm -f /usr/local/bin/gitx   # if installed with sudo
+rm -f ~/.local/bin/gitx     # if installed without sudo
 
 # 2. Remove the config file and API keys
 rm -rf ~/.config/gitx
@@ -97,13 +102,21 @@ See the full [uninstall guide](https://github.com/deveasyclick/gitx#uninstall) f
 curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
 ```
 
-### 2. Run interactive setup
+### 2. Configure your AI provider
+
+**Option A — Interactive setup** (walks you through provider, model, API key):
 
 ```bash
 gitx setup
 ```
 
-This walks you through choosing a provider, picking a model, and entering your API key. All settings are saved to `~/.config/gitx/config.yaml`.
+**Option B — Quick config** (set API key directly, using defaults):
+
+```bash
+gitx config set ai.api_key sk-...
+```
+
+All settings are saved to `~/.config/gitx/config.yaml`.
 
 ### 3. Generate a commit message
 

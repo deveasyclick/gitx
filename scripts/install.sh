@@ -1,11 +1,30 @@
 #!/bin/sh
 # GitX installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
+#        GITX_INSTALL_DIR=/custom/path curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sh
+#        curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/install.sh | sudo sh
 
 set -eu
 
 REPO="deveasyclick/gitx"
-BIN_DIR="${GITX_INSTALL_DIR:-/usr/local/bin}"
+detect_bin_dir() {
+  # Use explicit override if set
+  if [ -n "${GITX_INSTALL_DIR:-}" ]; then
+    echo "$GITX_INSTALL_DIR"
+    return
+  fi
+
+  # Check if /usr/local/bin is writable (no sudo needed)
+  if [ -w "/usr/local/bin" ] 2>/dev/null; then
+    echo "/usr/local/bin"
+    return
+  fi
+
+  # Fall back to user local bin
+  echo "${HOME}/.local/bin"
+}
+
+BIN_DIR="$(detect_bin_dir)"
 
 # Detect OS and arch
 detect_platform() {
