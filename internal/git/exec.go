@@ -144,12 +144,26 @@ func (c *ExecClient) DiffUnstaged(ctx context.Context) (domain.Change, error) {
 
 // Diff returns the diff between HEAD and the given base branch.
 func (c *ExecClient) Diff(ctx context.Context, base string) (domain.Change, error) {
-	diff, err := c.run(ctx, "diff", base+"...HEAD")
+	return c.diffBetween(ctx, base+"...HEAD")
+}
+
+// DiffRange returns the diff between two refs.
+func (c *ExecClient) DiffRange(ctx context.Context, from, to string) (domain.Change, error) {
+	spec := to
+	if from != "" {
+		spec = from + ".." + to
+	}
+	return c.diffBetween(ctx, spec)
+}
+
+// diffBetween runs "git diff <spec>" and parses the result.
+func (c *ExecClient) diffBetween(ctx context.Context, spec string) (domain.Change, error) {
+	diff, err := c.run(ctx, "diff", spec)
 	if err != nil {
 		return domain.Change{}, err
 	}
 
-	stat, err := c.run(ctx, "diff", base+"...HEAD", "--stat")
+	stat, err := c.run(ctx, "diff", spec, "--stat")
 	if err != nil {
 		return domain.Change{}, err
 	}

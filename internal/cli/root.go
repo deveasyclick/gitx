@@ -44,6 +44,7 @@ func init() {
 	rootCmd.AddCommand(newCommitCmd())
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newChangelogCmd())
+	rootCmd.AddCommand(newReleaseCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newSetupCmd())
 	rootCmd.AddCommand(newDoctorCmd())

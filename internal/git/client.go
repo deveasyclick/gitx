@@ -18,6 +18,9 @@ type Client interface {
 	// Diff returns the diff between the current state and a base branch.
 	Diff(ctx context.Context, base string) (domain.Change, error)
 
+	// DiffRange returns the diff between two refs (from..to).
+	DiffRange(ctx context.Context, from, to string) (domain.Change, error)
+
 	// Log returns commits between two refs (exclusive from, inclusive to).
 	// Use "HEAD" for to when generating PR descriptions.
 	Log(ctx context.Context, from, to string) ([]CommitLog, error)

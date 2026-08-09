@@ -14,9 +14,9 @@ import (
 func TestCommitService_Generate_Success(t *testing.T) {
 	svc := NewCommitService(
 		&mockGit{
-			status:  git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
-			diff:    domain.Change{Files: []string{"main.go"}, Diff: "diff --git a/main.go b/main.go\n+new\n-old"},
-			repo:    domain.RepoInfo{CurrentBranch: "main", IsClean: false},
+			status: git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
+			diff:   domain.Change{Files: []string{"main.go"}, Diff: "diff --git a/main.go b/main.go\n+new\n-old"},
+			repo:   domain.RepoInfo{CurrentBranch: "main", IsClean: false},
 		},
 		&mockAI{text: "feat: add new feature"},
 		prompts.NewCommitBuilder(),
@@ -151,10 +151,10 @@ index 123..456 100644
 
 	svc := NewCommitService(
 		&mockGit{
-			status: git.StagedChanges{IsEmpty: true},
+			status:         git.StagedChanges{IsEmpty: true},
 			unstagedStatus: git.StagedChanges{Files: []string{"api/handler.go", "ui/button.go"}, IsEmpty: false},
-			diff:   domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
-			repo:   domain.RepoInfo{CurrentBranch: "main"},
+			diff:           domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
+			repo:           domain.RepoInfo{CurrentBranch: "main"},
 		},
 		&mockAI{text: "feat: update component"},
 		prompts.NewCommitBuilder(),
@@ -192,7 +192,7 @@ index 123..456 100644
 func TestCommitService_GenerateGrouped_NoChanges(t *testing.T) {
 	svc := NewCommitService(
 		&mockGit{
-			status:  git.StagedChanges{IsEmpty: true},
+			status:         git.StagedChanges{IsEmpty: true},
 			unstagedStatus: git.StagedChanges{IsEmpty: true},
 		},
 		&mockAI{},
@@ -216,7 +216,7 @@ index abc..def 100644
 
 	svc := NewCommitService(
 		&mockGit{
-			status:  git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
+			status: git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
 			diff:   domain.Change{Files: []string{"main.go"}, Diff: diff},
 			repo:   domain.RepoInfo{CurrentBranch: "main"},
 		},
@@ -255,36 +255,51 @@ func TestCut(t *testing.T) {
 // --- Mocks ---
 
 type mockGit struct {
-	status         git.StagedChanges
-	unstagedStatus git.StagedChanges
-	diff           domain.Change
-	repo           domain.RepoInfo
-	log            []git.CommitLog
-	tags           []string
-	err            error
+	status           git.StagedChanges
+	unstagedStatus   git.StagedChanges
+	diff             domain.Change
+	repo             domain.RepoInfo
+	log              []git.CommitLog
+	tags             []string
+	err              error
+	logFrom, logTo   string
+	diffFrom, diffTo string
 }
 
-func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error) { return m.diff, m.err }
-func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error) { return m.diff, m.err }
+func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error)     { return m.diff, m.err }
+func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error)   { return m.diff, m.err }
 func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error) { return m.diff, m.err }
-func (m *mockGit) Log(_ context.Context, _, _ string) ([]git.CommitLog, error) { return m.log, m.err }
-func (m *mockGit) RecentCommits(_ context.Context, _ int, _ string) ([]git.CommitLog, error) { return m.log, m.err }
+func (m *mockGit) DiffRange(_ context.Context, from, to string) (domain.Change, error) {
+	m.diffFrom, m.diffTo = from, to
+	return m.diff, m.err
+}
+func (m *mockGit) Log(_ context.Context, from, to string) ([]git.CommitLog, error) {
+	m.logFrom, m.logTo = from, to
+	return m.log, m.err
+}
+func (m *mockGit) RecentCommits(_ context.Context, _ int, _ string) ([]git.CommitLog, error) {
+	return m.log, m.err
+}
 func (m *mockGit) Commit(_ context.Context, _ domain.CommitMessage) error { return m.err }
-func (m *mockGit) Status(_ context.Context) (git.StagedChanges, error) { return m.status, m.err }
-func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) { return m.unstagedStatus, m.err }
-func (m *mockGit) Tags(_ context.Context) ([]string, error) { return m.tags, m.err }
+func (m *mockGit) Status(_ context.Context) (git.StagedChanges, error)    { return m.status, m.err }
+func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) {
+	return m.unstagedStatus, m.err
+}
+func (m *mockGit) Tags(_ context.Context) ([]string, error)            { return m.tags, m.err }
 func (m *mockGit) RepoInfo(_ context.Context) (domain.RepoInfo, error) { return m.repo, m.err }
-func (m *mockGit) Stage(_ context.Context, _ []string) error { return m.err }
-func (m *mockGit) StageAll(_ context.Context) error { return m.err }
-func (m *mockGit) UnstageAll(_ context.Context) error { return m.err }
+func (m *mockGit) Stage(_ context.Context, _ []string) error           { return m.err }
+func (m *mockGit) StageAll(_ context.Context) error                    { return m.err }
+func (m *mockGit) UnstageAll(_ context.Context) error                  { return m.err }
 
 type mockAI struct {
-	text string
-	err  error
+	text           string
+	err            error
+	lastUserPrompt string
 }
 
 func (m *mockAI) Name() string { return "mock" }
 func (m *mockAI) Generate(_ context.Context, req ai.Request) (ai.Response, error) {
+	m.lastUserPrompt = req.UserPrompt
 	if m.err != nil {
 		return ai.Response{}, m.err
 	}

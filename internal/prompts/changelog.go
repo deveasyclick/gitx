@@ -13,6 +13,7 @@ type ChangelogPromptInput struct {
 	To      string // end tag (empty for HEAD)
 	Commits []git.CommitLog
 	Tags    []string
+	Diff    string // unified diff text (primary source of changes)
 }
 
 // ChangelogBuilder generates prompts for changelog generation.
@@ -31,7 +32,7 @@ func (b *ChangelogBuilder) Build(input ChangelogPromptInput) (string, string, er
 
 	system := `You are an expert software engineer generating changelog entries.
 
-Categorize commits into:
+Categorize the changes into:
 
 ## Added
 For new features.
@@ -46,9 +47,11 @@ For changes in existing functionality.
 For now-removed features.
 
 Rules:
+- Base the changelog on the actual code changes in the diff; the diff is the source of truth
+- Treat commit messages as supplementary context only — they can be incomplete or misleading (e.g. "wip", "in progress")
 - Group related commits together
 - Use bullet points with present-tense descriptions
-- Do not invent changes that are not in the commits
+- Do not invent changes that are not in the diff
 - Keep descriptions concise`
 
 	var tagInfo string
@@ -57,6 +60,8 @@ Rules:
 	} else if input.From != "" {
 		tagInfo = fmt.Sprintf("Since: %s\n", input.From)
 	}
+
+	diffSection := formatDiffSection(input.Diff)
 
 	var commitLines strings.Builder
 	for _, c := range input.Commits {
@@ -70,9 +75,11 @@ Rules:
 	user := fmt.Sprintf(`Generate a changelog entry for the following commits.
 
 %s
+%s
 Commits:
 %s`,
 		tagInfo,
+		diffSection,
 		commitLines.String(),
 	)
 

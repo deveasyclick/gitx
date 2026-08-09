@@ -47,6 +47,22 @@ func TestChangelogBuilder_Build(t *testing.T) {
 	}
 }
 
+func TestChangelogBuilder_IncludesDiff(t *testing.T) {
+	b := prompts.NewChangelogBuilder()
+	_, user, err := b.Build(prompts.ChangelogPromptInput{
+		From:    "v1.0.0",
+		To:      "v2.0.0",
+		Commits: []git.CommitLog{{Hash: "abc1234", Message: "in progress"}},
+		Diff:    "diff --git a/auth.go b/auth.go\n@@ -1 +1 @@\n-login\n+login with 2FA",
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !strings.Contains(user, "auth.go") {
+		t.Errorf("user prompt should contain diff content")
+	}
+}
+
 func TestChangelogBuilder_Build_NoCommits(t *testing.T) {
 	b := prompts.NewChangelogBuilder()
 	_, _, err := b.Build(prompts.ChangelogPromptInput{
