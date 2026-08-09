@@ -147,6 +147,7 @@
   <div class="nav-links">
     <a href="#install">Install</a>
     <a href="#commands">Commands</a>
+    <a href="#release">Release</a>
     <a href="#aliases">Aliases</a>
     <a href="#config">Config</a>
     <a href="#providers">Providers</a>
@@ -309,6 +310,34 @@ gitx changelog --output CHANGELOG.md</pre>
     <tr><td><code>-o, --output</code></td><td>Write output to a file</td></tr>
   </table>
 
+  <!-- release -->
+  <div class="card" style="margin: 24px 0 16px;">
+    <h4><span class="cmd">gitx release</span> — Orchestrate releases</h4>
+    <p style="margin-top: 8px;">Full release workflow: compare branches, generate changelog, bump versions, and create PR descriptions.</p>
+  </div>
+  <pre><span class="c"># --base is required</span>
+gitx release --base main
+
+<span class="c"># Force major version bump</span>
+gitx release --base main --bump major
+
+<span class="c"># Explicit version, skip changelog</span>
+gitx release --base main --version v2.0.0 --no-changelog</pre>
+
+  <table>
+    <tr><th>Flag</th><th>Description</th></tr>
+    <tr><td><code>--base</code></td><td>Base branch to compare against (required, e.g., main, master).</td></tr>
+    <tr><td><code>--version</code></td><td>Explicit version string (e.g., v1.2.3). Skips AI suggestion.</td></tr>
+    <tr><td><code>--bump</code></td><td>Version bump type: major, minor, or patch. AI-suggested if not set.</td></tr>
+    <tr><td><code>--changelog</code></td><td>Path to changelog file (default CHANGELOG.md).</td></tr>
+    <tr><td><code>--no-changelog</code></td><td>Skip changelog generation and file update.</td></tr>
+    <tr><td><code>--no-version</code></td><td>Skip version bumping in files.</td></tr>
+    <tr><td><code>--no-pr</code></td><td>Skip PR description generation.</td></tr>
+    <tr><td><code>--pr</code></td><td>Generate PR description without asking (default: asks interactively).</td></tr>
+  </table>
+
+  <p><strong>Interactive workflow:</strong> After comparing branches, the workflow guides you through version selection, branch strategy, AI-generated changelog (Accept / Regenerate / Copy / Edit), version file updates (<code>package.json</code>, <code>package-lock.json</code>), optional PR description generation (asks before generating), and final checkout instructions.</p>
+
   <!-- Other commands -->
   <div class="card-grid" style="margin-top: 32px;">
     <div class="card">
@@ -324,6 +353,78 @@ gitx changelog --output CHANGELOG.md</pre>
       <p>Diagnose installation and configuration — checks git, config, API keys, and clipboard tools.</p>
     </div>
   </div>
+</section>
+
+<!-- Release -->
+<section id="release">
+  <h2><a href="#release">Release Workflow</a></h2>
+
+  <p>The <code>gitx release</code> command orchestrates an entire release — from branch comparison to changelog generation, version bumping, and PR description creation. Every step is interactive and AI-assisted.</p>
+
+  <h3>Workflow steps</h3>
+
+  <div class="flowchart">
+    <pre style="border: none; background: none; padding: 0; font-size: 13px;">
+🔍 Compare branches  →  📦 Show diff  →  💬 Confirm release
+       │
+       ▼
+🤖 AI suggests version (major/minor/patch)
+       │
+       ▼
+🌿 Choose branch: current or release/vX.Y.Z
+       │
+       ▼
+📝 AI generates changelog  →  [Accept | Regenerate | Copy | Edit]
+       │                              │
+       ▼                              ▼ (accept)
+🔖 Bump version in files  ←  Write CHANGELOG.md
+       │
+       ▼
+📋 AI generates PR description  →  [Accept | Copy | Edit]
+       │
+       ▼
+✅ Print git commands (checkout, commit, tag)
+    </pre>
+  </div>
+
+  <h3>Version detection</h3>
+  <p>GitX reads the latest git tag to determine the current version. If no tags exist, it starts at <code>v0.1.0</code>. The AI analyzes commit messages to suggest a bump type following semantic versioning conventions.</p>
+
+  <h3>Changelog format</h3>
+  <p>The AI structures changelog entries into four categories:</p>
+  <ul>
+    <li><strong>Added</strong> — new features</li>
+    <li><strong>Fixed</strong> — bug fixes</li>
+    <li><strong>Changed</strong> — modifications to existing functionality</li>
+    <li><strong>Removed</strong> — deprecated features removed</li>
+  </ul>
+
+  <h3>Version file support</h3>
+  <p>Currently supports bumping the <code>version</code> field in:</p>
+  <ul>
+    <li><code>package.json</code></li>
+    <li><code>package-lock.json</code></li>
+  </ul>
+  <p>Additional file types can be added by extending the release service.</p>
+
+  <h3>Examples</h3>
+  <pre><span class="c"># Compare current branch against main</span>
+gitx release --base main
+
+<span class="c"># Force a patch bump</span>
+gitx release --base main --bump patch
+
+<span class="c"># Force a specific version</span>
+gitx release --base main --version v3.0.0
+
+<span class="c"># Skip changelog and PR description, just bump version</span>
+gitx release --base main --no-changelog --no-pr
+
+<span class="c"># Custom changelog path</span>
+gitx release --base main --changelog docs/CHANGELOG.md
+
+<span class="c"># --base is always required</span>
+gitx release --base main</pre>
 </section>
 
 <!-- Configuration -->
@@ -368,13 +469,13 @@ commit:
   <h3>Architecture</h3>
   <p>GitX uses a layered architecture with clear separation of concerns. Each layer has a single responsibility and communicates through well-defined interfaces.</p>
 
-  <pre style="font-size: 12px; line-height: 1.4;"><span class="c">CLI Layer</span>       gitx commit | describe | changelog | setup | config | doctor
+  <pre style="font-size: 12px; line-height: 1.4;"><span class="c">CLI Layer</span>       gitx commit | describe | changelog | release | setup | config | doctor
                         │
-<span class="c">Services Layer</span>    CommitService | DescribeService | ChangelogService
+<span class="c">Services Layer</span>    CommitService | DescribeService | ChangelogService | ReleaseService
                         │
 <span class="c">Git Layer</span>         Client interface → ExecClient (git via os/exec)
 <span class="c">AI Layer</span>          Provider interface → OpenAI | DeepSeek | Anthropic | Google | Ollama
-<span class="c">Prompts Layer</span>     Builder[T] → CommitBuilder | DescribeBuilder | ChangelogBuilder
+<span class="c">Prompts Layer</span>     Builder[T] → CommitBuilder | DescribeBuilder | ChangelogBuilder | ReleaseBuilder
                         │
 <span class="c">Security</span>          Secret scanner (redacts keys/tokens before sending to AI)
 <span class="c">Config</span>            ~/.config/gitx/config.yaml
