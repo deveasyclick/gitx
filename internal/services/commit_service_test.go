@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/user/gitx/internal/ai"
@@ -14,12 +15,13 @@ import (
 func TestCommitService_Generate_Success(t *testing.T) {
 	svc := NewCommitService(
 		&mockGit{
-			status:  git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
-			diff:    domain.Change{Files: []string{"main.go"}, Diff: "diff --git a/main.go b/main.go\n+new\n-old"},
-			repo:    domain.RepoInfo{CurrentBranch: "main", IsClean: false},
+			status: git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
+			diff:   domain.Change{Files: []string{"main.go"}, Diff: "diff --git a/main.go b/main.go\n+new\n-old"},
+			repo:   domain.RepoInfo{CurrentBranch: "main", IsClean: false},
 		},
 		&mockAI{text: "feat: add new feature"},
 		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
 	)
 
 	result, err := svc.Generate(context.Background(), CommitModeStaged)
@@ -42,6 +44,7 @@ func TestCommitService_Generate_NoStagedChanges(t *testing.T) {
 		},
 		&mockAI{},
 		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
 	)
 
 	_, err := svc.Generate(context.Background(), CommitModeStaged)
@@ -93,6 +96,7 @@ func TestCommitService_Generate_ParseResponse(t *testing.T) {
 				},
 				&mockAI{text: tt.aiText},
 				prompts.NewCommitBuilder(),
+				prompts.NewGroupBuilder(),
 			)
 
 			result, err := svc.Generate(context.Background(), CommitModeStaged)
@@ -133,7 +137,163 @@ func TestCleanResponse(t *testing.T) {
 	}
 }
 
-func TestCommitService_GenerateGrouped_MultipleDirectories(t *testing.T) {
+func TestCommitService_GenerateGrouped_FolderFallback_MultipleDirectories(t *testing.T) {
+	diff := `diff --git a/api/handler.go b/api/handler.go
+index abc..def 100644
+--- a/api/handler.go
++++ b/api/handler.go
+@@ -1 +1 @@
+-func old() {}
++func new() {}
+diff --git a/ui/button.go b/ui/button.go
+index 123..456 100644
+--- a/ui/button.go
++++ b/ui/button.go
+@@ -1 +1 @@
+-old button
++new button`
+
+	// The AI's response to the grouping call is not valid JSON, so the service
+	// must fall back to grouping by directory.
+	svc := NewCommitService(
+		&mockGit{
+			status:         git.StagedChanges{IsEmpty: true},
+			unstagedStatus: git.StagedChanges{Files: []string{"api/handler.go", "ui/button.go"}, IsEmpty: false},
+			diff:           domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
+			repo:           domain.RepoInfo{CurrentBranch: "main"},
+		},
+		&mockAI{
+			texts: []string{"feat: update component", "feat: update component", "feat: update component"},
+		},
+		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
+	)
+
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeAuto)
+	if err != nil {
+		t.Fatalf("GenerateGrouped: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(result.Results))
+	}
+
+	// First group should be api
+	if result.Results[0].Name != "api" {
+		t.Errorf("group[0].Name = %q, want %q", result.Results[0].Name, "api")
+	}
+	if len(result.Results[0].Files) != 1 || result.Results[0].Files[0] != "api/handler.go" {
+		t.Errorf("group[0].Files = %v, want [api/handler.go]", result.Results[0].Files)
+	}
+	if result.Results[0].Message.Title != "feat: update component" {
+		t.Errorf("group[0].Message.Title = %q", result.Results[0].Message.Title)
+	}
+
+	// Second group should be ui
+	if result.Results[1].Name != "ui" {
+		t.Errorf("group[1].Name = %q, want %q", result.Results[1].Name, "ui")
+	}
+	if len(result.Results[1].Files) != 1 || result.Results[1].Files[0] != "ui/button.go" {
+		t.Errorf("group[1].Files = %v, want [ui/button.go]", result.Results[1].Files)
+	}
+}
+
+func TestCommitService_GenerateGrouped_AI_LogicalGroups(t *testing.T) {
+	diff := `diff --git a/api/auth.go b/api/auth.go
+index abc..def 100644
+--- a/api/auth.go
++++ b/api/auth.go
+@@ -1 +1 @@
+-old auth
++new auth
+diff --git a/ui/auth_modal.go b/ui/auth_modal.go
+index 123..456 100644
+--- a/ui/auth_modal.go
++++ b/ui/auth_modal.go
+@@ -1 +1 @@
+-old modal
++new modal
+diff --git a/api/payment.go b/api/payment.go
+index 111..222 100644
+--- a/api/payment.go
++++ b/api/payment.go
+@@ -1 +1 @@
+-old payment
++new payment
+diff --git a/ui/payment_form.go b/ui/payment_form.go
+index 333..444 100644
+--- a/ui/payment_form.go
++++ b/ui/payment_form.go
+@@ -1 +1 @@
+-old form
++new form`
+
+	// The AI groups files across directories by concern: auth (api + ui) and
+	// payment (api + ui).
+	plan := `{"groups":[
+		{"name":"add user authentication","files":["api/auth.go","ui/auth_modal.go"]},
+		{"name":"add payment flow","files":["api/payment.go","ui/payment_form.go"]}
+	]}`
+
+	svc := NewCommitService(
+		&mockGit{
+			status: git.StagedChanges{
+				Files:   []string{"api/auth.go", "ui/auth_modal.go", "api/payment.go", "ui/payment_form.go"},
+				IsEmpty: false,
+			},
+			diff: domain.Change{
+				Files: []string{"api/auth.go", "ui/auth_modal.go", "api/payment.go", "ui/payment_form.go"},
+				Diff:  diff,
+			},
+			repo: domain.RepoInfo{CurrentBranch: "main"},
+		},
+		&mockAI{
+			texts: []string{plan, "feat: add user authentication", "feat: add payment flow"},
+		},
+		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
+	)
+
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeStaged)
+	if err != nil {
+		t.Fatalf("GenerateGrouped: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(result.Results))
+	}
+
+	g0 := result.Results[0]
+	if g0.Name != "add user authentication" {
+		t.Errorf("group[0].Name = %q", g0.Name)
+	}
+	if len(g0.Files) != 2 || g0.Files[0] != "api/auth.go" || g0.Files[1] != "ui/auth_modal.go" {
+		t.Errorf("group[0].Files = %v", g0.Files)
+	}
+	if g0.Message.Title != "feat: add user authentication" {
+		t.Errorf("group[0].Message.Title = %q", g0.Message.Title)
+	}
+	// Each group's diff must contain only its own files.
+	if !contains(g0.Diff, "api/auth.go") || contains(g0.Diff, "payment") {
+		t.Errorf("group[0].Diff does not match its files:\n%s", g0.Diff)
+	}
+
+	g1 := result.Results[1]
+	if g1.Name != "add payment flow" {
+		t.Errorf("group[1].Name = %q", g1.Name)
+	}
+	if len(g1.Files) != 2 || g1.Files[0] != "api/payment.go" || g1.Files[1] != "ui/payment_form.go" {
+		t.Errorf("group[1].Files = %v", g1.Files)
+	}
+	if g1.Message.Title != "feat: add payment flow" {
+		t.Errorf("group[1].Message.Title = %q", g1.Message.Title)
+	}
+	if !contains(g1.Diff, "api/payment.go") || contains(g1.Diff, "auth") {
+		t.Errorf("group[1].Diff does not match its files:\n%s", g1.Diff)
+	}
+}
+
+func TestCommitService_GenerateGrouped_Fallback_InvalidJSON(t *testing.T) {
 	diff := `diff --git a/api/handler.go b/api/handler.go
 index abc..def 100644
 --- a/api/handler.go
@@ -151,52 +311,140 @@ index 123..456 100644
 
 	svc := NewCommitService(
 		&mockGit{
-			status: git.StagedChanges{IsEmpty: true},
-			unstagedStatus: git.StagedChanges{Files: []string{"api/handler.go", "ui/button.go"}, IsEmpty: false},
-			diff:   domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
-			repo:   domain.RepoInfo{CurrentBranch: "main"},
+			status: git.StagedChanges{
+				Files:   []string{"api/handler.go", "ui/button.go"},
+				IsEmpty: false,
+			},
+			diff: domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
+			repo: domain.RepoInfo{CurrentBranch: "main"},
 		},
-		&mockAI{text: "feat: update component"},
+		&mockAI{
+			texts: []string{"sure, here is the plan", "feat: api change", "feat: ui change"},
+		},
 		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
 	)
 
-	result, err := svc.GenerateGrouped(context.Background(), CommitModeAuto)
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeStaged)
 	if err != nil {
 		t.Fatalf("GenerateGrouped: %v", err)
 	}
 
 	if len(result.Results) != 2 {
-		t.Fatalf("expected 2 groups, got %d", len(result.Results))
+		t.Fatalf("expected 2 fallback groups, got %d", len(result.Results))
 	}
-
-	// First group should be api
-	if result.Results[0].Dir != "api" {
-		t.Errorf("group[0].Dir = %q, want %q", result.Results[0].Dir, "api")
+	if result.Results[0].Name != "api" || result.Results[1].Name != "ui" {
+		t.Errorf("expected folder fallback groups, got %q and %q", result.Results[0].Name, result.Results[1].Name)
 	}
-	if len(result.Results[0].Files) != 1 || result.Results[0].Files[0] != "api/handler.go" {
-		t.Errorf("group[0].Files = %v, want [api/handler.go]", result.Results[0].Files)
-	}
-	if result.Results[0].Message.Title != "feat: update component" {
+	if result.Results[0].Message.Title != "feat: api change" {
 		t.Errorf("group[0].Message.Title = %q", result.Results[0].Message.Title)
 	}
+}
 
-	// Second group should be ui
-	if result.Results[1].Dir != "ui" {
-		t.Errorf("group[1].Dir = %q, want %q", result.Results[1].Dir, "ui")
+func TestCommitService_GenerateGrouped_Fallback_AIError(t *testing.T) {
+	diff := `diff --git a/api/handler.go b/api/handler.go
+index abc..def 100644
+--- a/api/handler.go
++++ b/api/handler.go
+@@ -1 +1 @@
+-func old() {}
++func new() {}
+diff --git a/ui/button.go b/ui/button.go
+index 123..456 100644
+--- a/ui/button.go
++++ b/ui/button.go
+@@ -1 +1 @@
+-old button
++new button`
+
+	svc := NewCommitService(
+		&mockGit{
+			status: git.StagedChanges{
+				Files:   []string{"api/handler.go", "ui/button.go"},
+				IsEmpty: false,
+			},
+			diff: domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
+			repo: domain.RepoInfo{CurrentBranch: "main"},
+		},
+		&mockAI{
+			errs:  []error{errors.New("provider unavailable")},
+			texts: []string{"", "feat: api change", "feat: ui change"},
+		},
+		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
+	)
+
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeStaged)
+	if err != nil {
+		t.Fatalf("GenerateGrouped: %v", err)
 	}
-	if len(result.Results[1].Files) != 1 || result.Results[1].Files[0] != "ui/button.go" {
-		t.Errorf("group[1].Files = %v, want [ui/button.go]", result.Results[1].Files)
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 fallback groups, got %d", len(result.Results))
+	}
+	if result.Results[0].Name != "api" || result.Results[1].Name != "ui" {
+		t.Errorf("expected folder fallback groups, got %q and %q", result.Results[0].Name, result.Results[1].Name)
+	}
+}
+
+func TestCommitService_GenerateGrouped_Fallback_IncompleteCoverage(t *testing.T) {
+	diff := `diff --git a/api/handler.go b/api/handler.go
+index abc..def 100644
+--- a/api/handler.go
++++ b/api/handler.go
+@@ -1 +1 @@
+-func old() {}
++func new() {}
+diff --git a/ui/button.go b/ui/button.go
+index 123..456 100644
+--- a/ui/button.go
++++ b/ui/button.go
+@@ -1 +1 @@
+-old button
++new button`
+
+	// The AI plan omits ui/button.go; grouping must not drop it, so the service
+	// falls back to grouping by directory.
+	plan := `{"groups":[{"name":"only api","files":["api/handler.go"]}]}`
+
+	svc := NewCommitService(
+		&mockGit{
+			status: git.StagedChanges{
+				Files:   []string{"api/handler.go", "ui/button.go"},
+				IsEmpty: false,
+			},
+			diff: domain.Change{Files: []string{"api/handler.go", "ui/button.go"}, Diff: diff},
+			repo: domain.RepoInfo{CurrentBranch: "main"},
+		},
+		&mockAI{
+			texts: []string{plan, "feat: api change", "feat: ui change"},
+		},
+		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
+	)
+
+	result, err := svc.GenerateGrouped(context.Background(), CommitModeStaged)
+	if err != nil {
+		t.Fatalf("GenerateGrouped: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 fallback groups, got %d", len(result.Results))
+	}
+	if result.Results[0].Name != "api" || result.Results[1].Name != "ui" {
+		t.Errorf("expected folder fallback groups, got %q and %q", result.Results[0].Name, result.Results[1].Name)
 	}
 }
 
 func TestCommitService_GenerateGrouped_NoChanges(t *testing.T) {
 	svc := NewCommitService(
 		&mockGit{
-			status:  git.StagedChanges{IsEmpty: true},
+			status:         git.StagedChanges{IsEmpty: true},
 			unstagedStatus: git.StagedChanges{IsEmpty: true},
 		},
 		&mockAI{},
 		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
 	)
 
 	_, err := svc.GenerateGrouped(context.Background(), CommitModeAuto)
@@ -216,12 +464,13 @@ index abc..def 100644
 
 	svc := NewCommitService(
 		&mockGit{
-			status:  git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
+			status: git.StagedChanges{Files: []string{"main.go"}, IsEmpty: false},
 			diff:   domain.Change{Files: []string{"main.go"}, Diff: diff},
 			repo:   domain.RepoInfo{CurrentBranch: "main"},
 		},
 		&mockAI{text: "feat: update main"},
 		prompts.NewCommitBuilder(),
+		prompts.NewGroupBuilder(),
 	)
 
 	result, err := svc.GenerateGrouped(context.Background(), CommitModeStaged)
@@ -232,11 +481,103 @@ index abc..def 100644
 	if len(result.Results) != 1 {
 		t.Fatalf("expected 1 group, got %d", len(result.Results))
 	}
-	if result.Results[0].Dir != "." {
-		t.Errorf("Dir = %q, want %q", result.Results[0].Dir, ".")
+	if result.Results[0].Name != "." {
+		t.Errorf("Name = %q, want %q", result.Results[0].Name, ".")
 	}
 	if len(result.Results[0].Files) != 1 || result.Results[0].Files[0] != "main.go" {
 		t.Errorf("Files = %v, want [main.go]", result.Results[0].Files)
+	}
+}
+
+func TestParseGroupPlan(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []git.FileGroup
+		wantErr bool
+	}{
+		{
+			name:  "valid plan",
+			input: `{"groups":[{"name":"add auth","files":["auth.go","auth_test.go"]},{"name":"fix ui","files":["button.go"]}]}`,
+			want: []git.FileGroup{
+				{Name: "add auth", Files: []string{"auth.go", "auth_test.go"}},
+				{Name: "fix ui", Files: []string{"button.go"}},
+			},
+		},
+		{
+			name:  "wrapped in markdown fences",
+			input: "```json\n{\"groups\":[{\"name\":\"add auth\",\"files\":[\"auth.go\"]}]}\n```",
+			want: []git.FileGroup{
+				{Name: "add auth", Files: []string{"auth.go"}},
+			},
+		},
+		{
+			name:  "surrounding commentary",
+			input: `Here is my plan: {"groups":[{"name":"add auth","files":["auth.go"]}]} hope that helps`,
+			want: []git.FileGroup{
+				{Name: "add auth", Files: []string{"auth.go"}},
+			},
+		},
+		{
+			name:  "duplicate files deduped",
+			input: `{"groups":[{"name":"add auth","files":["auth.go","auth.go"]}]}`,
+			want: []git.FileGroup{
+				{Name: "add auth", Files: []string{"auth.go"}},
+			},
+		},
+		{
+			name:    "no JSON object",
+			input:   "not json at all",
+			wantErr: true,
+		},
+		{
+			name:    "empty groups",
+			input:   `{"groups":[]}`,
+			wantErr: true,
+		},
+		{
+			name:    "group without name",
+			input:   `{"groups":[{"files":["auth.go"]}]}`,
+			wantErr: true,
+		},
+		{
+			name:    "group without files",
+			input:   `{"groups":[{"name":"empty group"}]}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseGroupPlan(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseGroupPlan: %v", err)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d groups, want %d", len(got), len(tt.want))
+			}
+			for i := range tt.want {
+				if got[i].Name != tt.want[i].Name {
+					t.Errorf("group[%d].Name = %q, want %q", i, got[i].Name, tt.want[i].Name)
+				}
+				if len(got[i].Files) != len(tt.want[i].Files) {
+					t.Errorf("group[%d].Files = %v, want %v", i, got[i].Files, tt.want[i].Files)
+					continue
+				}
+				for j := range tt.want[i].Files {
+					if got[i].Files[j] != tt.want[i].Files[j] {
+						t.Errorf("group[%d].Files = %v, want %v", i, got[i].Files, tt.want[i].Files)
+						break
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -252,6 +593,10 @@ func TestCut(t *testing.T) {
 	}
 }
 
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
+
 // --- Mocks ---
 
 type mockGit struct {
@@ -264,32 +609,46 @@ type mockGit struct {
 	err            error
 }
 
-func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error) { return m.diff, m.err }
-func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error) { return m.diff, m.err }
-func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error) { return m.diff, m.err }
+func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error)         { return m.diff, m.err }
+func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error)       { return m.diff, m.err }
+func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error)     { return m.diff, m.err }
 func (m *mockGit) Log(_ context.Context, _, _ string) ([]git.CommitLog, error) { return m.log, m.err }
-func (m *mockGit) RecentCommits(_ context.Context, _ int, _ string) ([]git.CommitLog, error) { return m.log, m.err }
+func (m *mockGit) RecentCommits(_ context.Context, _ int, _ string) ([]git.CommitLog, error) {
+	return m.log, m.err
+}
 func (m *mockGit) Commit(_ context.Context, _ domain.CommitMessage) error { return m.err }
-func (m *mockGit) Status(_ context.Context) (git.StagedChanges, error) { return m.status, m.err }
-func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) { return m.unstagedStatus, m.err }
-func (m *mockGit) Tags(_ context.Context) ([]string, error) { return m.tags, m.err }
+func (m *mockGit) Status(_ context.Context) (git.StagedChanges, error)    { return m.status, m.err }
+func (m *mockGit) UnstagedStatus(_ context.Context) (git.StagedChanges, error) {
+	return m.unstagedStatus, m.err
+}
+func (m *mockGit) Tags(_ context.Context) ([]string, error)            { return m.tags, m.err }
 func (m *mockGit) RepoInfo(_ context.Context) (domain.RepoInfo, error) { return m.repo, m.err }
-func (m *mockGit) Stage(_ context.Context, _ []string) error { return m.err }
-func (m *mockGit) StageAll(_ context.Context) error { return m.err }
-func (m *mockGit) UnstageAll(_ context.Context) error { return m.err }
+func (m *mockGit) Stage(_ context.Context, _ []string) error           { return m.err }
+func (m *mockGit) StageAll(_ context.Context) error                    { return m.err }
+func (m *mockGit) UnstageAll(_ context.Context) error                  { return m.err }
 
 type mockAI struct {
-	text string
-	err  error
+	text  string   // fallback text returned when texts is empty
+	texts []string // queued responses; each Generate call pops the next
+	errs  []error  // queued errors parallel to texts; nil entry means no error
 }
 
 func (m *mockAI) Name() string { return "mock" }
 func (m *mockAI) Generate(_ context.Context, req ai.Request) (ai.Response, error) {
-	if m.err != nil {
-		return ai.Response{}, m.err
+	if len(m.errs) > 0 {
+		err := m.errs[0]
+		m.errs = m.errs[1:]
+		if err != nil {
+			return ai.Response{}, err
+		}
+	}
+	text := m.text
+	if len(m.texts) > 0 {
+		text = m.texts[0]
+		m.texts = m.texts[1:]
 	}
 	return ai.Response{
-		Text: m.text,
+		Text: text,
 		Usage: ai.TokenUsage{
 			InputTokens:  50,
 			OutputTokens: 10,

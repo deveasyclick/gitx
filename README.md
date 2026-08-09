@@ -213,10 +213,10 @@ Generate a commit message from changes.
 gitx commit                     # Auto: staged first, unstaged fallback
 gitx commit --staged            # Staged only (error if empty)
 gitx commit --unstaged          # Unstaged only (error if empty)
-gitx commit --group             # Split changes by directory into separate commits
+gitx commit --group             # Split changes into logical groups (AI; falls back to by directory)
 gitx commit --provider ollama   # Override AI provider
 gitx commit --model llama3      # Override AI model
-gitx commit --group             # Split changes by directory into separate commits
+gitx commit --group             # Split changes into logical groups (AI; falls back to by directory)
 ```
 
 **Interactive flow:**
@@ -748,7 +748,7 @@ curl -fsSL https://raw.githubusercontent.com/deveasyclick/gitx/main/scripts/inst
 - [x] Multiple AI providers (OpenAI, DeepSeek, Anthropic, Google, OpenRouter, Ollama)
 - [x] Secret scanning
 - [x] Interactive confirmation flows with copy to clipboard
-- [x] `gitx commit --group` — Split large changes into logical commits by directory
+- [x] `gitx commit --group` — Split large changes into logical commits (AI-based grouping, falls back to by directory)
 - [x] Live-reload development with air
 - [x] Optional git aliases (`scripts/git-aliases.sh`) for daily workflows
 

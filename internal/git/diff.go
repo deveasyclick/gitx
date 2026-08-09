@@ -7,14 +7,22 @@ import (
 	"github.com/user/gitx/internal/domain"
 )
 
-// GroupedDiff represents a diff grouped by directory.
+// GroupedDiff represents a group of changed files with a combined diff.
+// A group may be a logical group (named by an AI partition) or a directory group.
 type GroupedDiff struct {
-	Dir   string         // directory name (e.g. "api", "ui", or "." for root)
-	Files []string       // files in this group
-	Diff  string         // combined diff for this group
+	Name  string   // group name (e.g. a logical description or directory name)
+	Files []string // files in this group
+	Diff  string   // combined diff for this group
+}
+
+// FileGroup is a named partition of files, e.g. produced by AI-based grouping.
+type FileGroup struct {
+	Name  string   // logical group name
+	Files []string // files assigned to this group
 }
 
 // GroupDiffsByDir splits a unified diff into groups by top-level directory.
+// It is used as a fallback when logical (AI) grouping is unavailable.
 func GroupDiffsByDir(change domain.Change) []GroupedDiff {
 	sections := splitDiffSections(change.Diff)
 	groups := make(map[string]*GroupedDiff)
@@ -31,7 +39,7 @@ func GroupDiffsByDir(change domain.Change) []GroupedDiff {
 
 		if _, ok := groups[dir]; !ok {
 			order = append(order, dir)
-			groups[dir] = &GroupedDiff{Dir: dir}
+			groups[dir] = &GroupedDiff{Name: dir}
 		}
 		g := groups[dir]
 		g.Files = append(g.Files, file)
@@ -46,6 +54,63 @@ func GroupDiffsByDir(change domain.Change) []GroupedDiff {
 		result = append(result, *groups[dir])
 	}
 	return result
+}
+
+// GroupDiffsByFileGroups recombines the per-file diff sections of change into
+// named groups according to the given partition. Files that appear in a group
+// but have no diff section are skipped; files not mentioned by any group are
+// simply not included (callers should use FilesInDiff to verify full coverage).
+func GroupDiffsByFileGroups(change domain.Change, groups []FileGroup) []GroupedDiff {
+	sections := splitDiffSections(change.Diff)
+	byFile := make(map[string]string, len(sections))
+	for _, sec := range sections {
+		file := extractFilePath(sec.header)
+		if file == "" {
+			continue
+		}
+		byFile[file] = sec.header + "\n" + sec.body
+	}
+
+	result := make([]GroupedDiff, 0, len(groups))
+	seen := make(map[string]bool)
+	for _, fg := range groups {
+		gd := GroupedDiff{Name: fg.Name}
+		for _, f := range fg.Files {
+			if seen[f] {
+				continue
+			}
+			d, ok := byFile[f]
+			if !ok {
+				continue
+			}
+			seen[f] = true
+			gd.Files = append(gd.Files, f)
+			if gd.Diff != "" {
+				gd.Diff += "\n"
+			}
+			gd.Diff += d
+		}
+		if len(gd.Files) > 0 {
+			result = append(result, gd)
+		}
+	}
+	return result
+}
+
+// FilesInDiff returns the file paths referenced by a unified diff, in order of
+// first appearance. It is used to verify that a grouping covers every change.
+func FilesInDiff(change domain.Change) []string {
+	var files []string
+	seen := make(map[string]bool)
+	for _, sec := range splitDiffSections(change.Diff) {
+		file := extractFilePath(sec.header)
+		if file == "" || seen[file] {
+			continue
+		}
+		seen[file] = true
+		files = append(files, file)
+	}
+	return files
 }
 
 // diffSection is a single file entry in a unified diff.

@@ -35,7 +35,7 @@ func newCommitCmd() *cobra.Command {
 By default, uses staged changes. If no changes are staged,
 automatically falls back to unstaged (tracked) changes.
 Use --staged or --unstaged to explicitly control the source.
-Use --group to split changes by directory into separate commits.`,
+Use --group to split changes into logical groups (AI-based, falls back to by directory).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return commitRun(cmd, flags)
 		},
@@ -45,7 +45,7 @@ Use --group to split changes by directory into separate commits.`,
 	cmd.Flags().StringVar(&flags.model, "model", "", "override AI model")
 	cmd.Flags().BoolVar(&flags.staged, "staged", false, "use only staged changes")
 	cmd.Flags().BoolVar(&flags.unstaged, "unstaged", false, "use only unstaged changes")
-	cmd.Flags().BoolVar(&flags.group, "group", false, "split changes by directory into separate commits")
+	cmd.Flags().BoolVar(&flags.group, "group", false, "split changes into logical groups for separate commits (AI, fallback: by directory)")
 
 	return cmd
 }
@@ -70,7 +70,7 @@ func commitRun(cmd *cobra.Command, flags commitFlags) error {
 	}
 
 	gitClient := git.NewExecClient(".")
-	svc := services.NewCommitService(gitClient, provider, prompts.NewCommitBuilder())
+	svc := services.NewCommitService(gitClient, provider, prompts.NewCommitBuilder(), prompts.NewGroupBuilder())
 
 	mode := resolveCommitMode(flags)
 	modeLabel := modeLabel(mode)
@@ -124,15 +124,15 @@ func groupedCommitRun(cmd *cobra.Command, svc *services.CommitService, gitClient
 
 	// Show all grouped messages
 	fmt.Println()
-	ui.PrintInfo(fmt.Sprintf("Generated %d commits grouped by directory:", len(groupedResult.Results)))
+	ui.PrintInfo(fmt.Sprintf("Generated %d logical commit groups:", len(groupedResult.Results)))
 	fmt.Println()
 
 	for i, g := range groupedResult.Results {
-		dirLabel := g.Dir
-		if dirLabel == "." {
-			dirLabel = "root"
+		groupLabel := g.Name
+		if groupLabel == "." {
+			groupLabel = "root"
 		}
-		fmt.Printf("  ── [%d] %s ── (%d file(s))\n", i+1, dirLabel, len(g.Files))
+		fmt.Printf("  ── [%d] %s ── (%d file(s))\n", i+1, groupLabel, len(g.Files))
 		fmt.Printf("      %s\n", g.Message.Title)
 		if g.Message.Body != "" {
 			bodyPreview := strings.Split(g.Message.Body, "\n")[0]
@@ -244,13 +244,13 @@ func groupedInteractionLoop(cmd *cobra.Command, svc *services.CommitService, git
 
 	for len(remaining) > 0 {
 		g := remaining[0]
-		dirLabel := g.Dir
-		if dirLabel == "." {
-			dirLabel = "root"
+		groupLabel := g.Name
+		if groupLabel == "." {
+			groupLabel = "root"
 		}
 
 		fmt.Println()
-		ui.PrintInfo(fmt.Sprintf("Group: %s", dirLabel))
+		ui.PrintInfo(fmt.Sprintf("Group: %s", groupLabel))
 		fmt.Println("  Files:")
 		for _, f := range g.Files {
 			fmt.Printf("    - %s\n", f)
@@ -289,13 +289,13 @@ func groupedInteractionLoop(cmd *cobra.Command, svc *services.CommitService, git
 				return fmt.Errorf("edit")
 			}
 			if err := gitClient.Stage(cmd.Context(), g.Files); err != nil {
-				ui.PrintError(fmt.Sprintf("Failed to stage %s: %s", dirLabel, err.Error()))
+				ui.PrintError(fmt.Sprintf("Failed to stage %s: %s", groupLabel, err.Error()))
 				return fmt.Errorf("edit")
 			}
 			if err := gitClient.Commit(cmd.Context(), parsed); err != nil {
-				return fmt.Errorf("committing %s: %w", dirLabel, err)
+				return fmt.Errorf("committing %s: %w", groupLabel, err)
 			}
-			ui.PrintSuccess(fmt.Sprintf("Committed %s with edits.", dirLabel))
+			ui.PrintSuccess(fmt.Sprintf("Committed %s with edits.", groupLabel))
 			remaining = remaining[1:]
 
 		case ui.ConfirmCopy:
@@ -306,7 +306,7 @@ func groupedInteractionLoop(cmd *cobra.Command, svc *services.CommitService, git
 			}
 
 		case ui.ConfirmRegenerate:
-			spinner := ui.NewSpinner(fmt.Sprintf("Regenerating message for %s...", dirLabel))
+			spinner := ui.NewSpinner(fmt.Sprintf("Regenerating message for %s...", groupLabel))
 			if ui.IsInteractive() {
 				spinner.Start()
 			}
@@ -318,14 +318,20 @@ func groupedInteractionLoop(cmd *cobra.Command, svc *services.CommitService, git
 				ui.PrintError(err.Error())
 				continue
 			}
+			matched := false
 			for _, ng := range newResult.Results {
-				if ng.Dir == g.Dir {
+				if sameFiles(ng.Files, g.Files) {
 					remaining[0] = ng
 					g = ng
+					matched = true
 					break
 				}
 			}
-			ui.PrintInfo(fmt.Sprintf("New message for %s:", dirLabel))
+			if !matched {
+				ui.PrintWarning("Grouping changed during regeneration; keeping the current group.")
+				continue
+			}
+			ui.PrintInfo(fmt.Sprintf("New message for %s:", groupLabel))
 			ui.PrintCommitMessage(g.Message, outputLevel())
 
 		case ui.ConfirmStage:
@@ -334,13 +340,13 @@ func groupedInteractionLoop(cmd *cobra.Command, svc *services.CommitService, git
 				return fmt.Errorf("stage")
 			}
 			if err := gitClient.Stage(cmd.Context(), g.Files); err != nil {
-				ui.PrintError(fmt.Sprintf("Failed to stage %s: %s", dirLabel, err.Error()))
+				ui.PrintError(fmt.Sprintf("Failed to stage %s: %s", groupLabel, err.Error()))
 				return fmt.Errorf("stage")
 			}
-			ui.PrintSuccess(fmt.Sprintf("Staged %d file(s) for %s. Review with: git diff --cached", len(g.Files), dirLabel))
+			ui.PrintSuccess(fmt.Sprintf("Staged %d file(s) for %s. Review with: git diff --cached", len(g.Files), groupLabel))
 
 		case ui.ConfirmNo:
-			ui.PrintInfo(fmt.Sprintf("Skipped %s.", dirLabel))
+			ui.PrintInfo(fmt.Sprintf("Skipped %s.", groupLabel))
 			remaining = remaining[1:]
 
 		case ui.ConfirmQuit:
@@ -355,25 +361,42 @@ func groupedInteractionLoop(cmd *cobra.Command, svc *services.CommitService, git
 	return nil
 }
 
+// sameFiles reports whether two file lists contain the same set of paths.
+func sameFiles(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]bool, len(a))
+	for _, f := range a {
+		set[f] = true
+	}
+	for _, f := range b {
+		if !set[f] {
+			return false
+		}
+	}
+	return true
+}
+
 // commitGroup stages and commits a single group.
 func commitGroup(gitClient *git.ExecClient, ctx context.Context, g services.GroupedGenerateResult) error {
-	dirLabel := g.Dir
-	if dirLabel == "." {
-		dirLabel = "root"
+	groupLabel := g.Name
+	if groupLabel == "." {
+		groupLabel = "root"
 	}
 	if err := gitClient.UnstageAll(ctx); err != nil {
 		ui.PrintError(fmt.Sprintf("Failed to unstage: %s", err.Error()))
 		return fmt.Errorf("commit")
 	}
 	if err := gitClient.Stage(ctx, g.Files); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to stage %s: %s", dirLabel, err.Error()))
+		ui.PrintError(fmt.Sprintf("Failed to stage %s: %s", groupLabel, err.Error()))
 		return fmt.Errorf("commit")
 	}
 	if err := gitClient.Commit(ctx, g.Message); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to commit %s: %s", dirLabel, err.Error()))
+		ui.PrintError(fmt.Sprintf("Failed to commit %s: %s", groupLabel, err.Error()))
 		return fmt.Errorf("commit")
 	}
-	ui.PrintSuccess(fmt.Sprintf("Committed %s.", dirLabel))
+	ui.PrintSuccess(fmt.Sprintf("Committed %s.", groupLabel))
 	return nil
 }
 
@@ -449,9 +472,10 @@ func printChangedFiles(gitClient *git.ExecClient, ctx context.Context, mode serv
 
 // ensureStagedForCommit ensures the correct files are staged before committing.
 // Behavior depends on the mode:
-//   --staged:   commit only what's already staged (no change)
-//   --unstaged: unstage everything, then stage only the unstaged files
-//   auto:       stage everything before committing
+//
+//	--staged:   commit only what's already staged (no change)
+//	--unstaged: unstage everything, then stage only the unstaged files
+//	auto:       stage everything before committing
 func ensureStagedForCommit(cmd *cobra.Command, gitClient *git.ExecClient, mode services.CommitMode) error {
 	switch mode {
 	case services.CommitModeStaged:

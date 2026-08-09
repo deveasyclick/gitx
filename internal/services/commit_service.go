@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,7 +21,7 @@ type GroupedResult struct {
 
 // GroupedGenerateResult is a single group's generated message.
 type GroupedGenerateResult struct {
-	Dir     string
+	Name    string
 	Files   []string
 	Message domain.CommitMessage
 	Diff    string
@@ -43,15 +44,17 @@ type CommitService struct {
 	git  git.Client
 	ai   aiProvider
 	pmpt prompts.Builder[prompts.CommitPromptInput]
+	grp  prompts.Builder[prompts.GroupPromptInput]
 	scan bool
 }
 
 // NewCommitService creates a new commit service.
-func NewCommitService(gitClient git.Client, aiProvider aiProvider, prompt prompts.Builder[prompts.CommitPromptInput]) *CommitService {
+func NewCommitService(gitClient git.Client, aiProvider aiProvider, prompt prompts.Builder[prompts.CommitPromptInput], groupPrompt prompts.Builder[prompts.GroupPromptInput]) *CommitService {
 	return &CommitService{
 		git:  gitClient,
 		ai:   aiProvider,
 		pmpt: prompt,
+		grp:  groupPrompt,
 		scan: true,
 	}
 }
@@ -230,8 +233,9 @@ func (s *CommitService) GenerateGrouped(ctx context.Context, mode CommitMode) (*
 		return nil, fmt.Errorf("reading repo info: %w", err)
 	}
 
-	// Group diffs by directory
-	groups := git.GroupDiffsByDir(change)
+	// Group changes: ask the AI for a logical partition, fall back to
+	// grouping by directory when that is unavailable.
+	groups := s.groupChanges(ctx, change, info.CurrentBranch)
 	if len(groups) == 0 {
 		return nil, errors.New("no changes to group")
 	}
@@ -249,7 +253,7 @@ func (s *CommitService) GenerateGrouped(ctx context.Context, mode CommitMode) (*
 			Style:  "conventional",
 		})
 		if err != nil {
-			return nil, fmt.Errorf("building prompt for %s: %w", g.Dir, err)
+			return nil, fmt.Errorf("building prompt for %s: %w", g.Name, err)
 		}
 
 		system := "You are an expert software engineer. Generate a conventional commit message."
@@ -258,12 +262,12 @@ func (s *CommitService) GenerateGrouped(ctx context.Context, mode CommitMode) (*
 			UserPrompt:   userPrompt,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("AI generation for %s: %w", g.Dir, err)
+			return nil, fmt.Errorf("AI generation for %s: %w", g.Name, err)
 		}
 
 		msg := parseCommitMessage(resp.Text)
 		results = append(results, GroupedGenerateResult{
-			Dir:     g.Dir,
+			Name:    g.Name,
 			Files:   g.Files,
 			Message: msg,
 			Diff:    g.Diff,
@@ -271,6 +275,107 @@ func (s *CommitService) GenerateGrouped(ctx context.Context, mode CommitMode) (*
 	}
 
 	return &GroupedResult{Results: results}, nil
+}
+
+// groupChanges partitions the change into groups for separate commits. It first
+// asks the AI for a logical partition of the diff; if that fails or does not
+// cover every changed file, it falls back to grouping by top-level directory.
+func (s *CommitService) groupChanges(ctx context.Context, change domain.Change, branch string) []git.GroupedDiff {
+	if groups, ok := s.aiGroupChanges(ctx, change, branch); ok {
+		return git.GroupDiffsByFileGroups(change, groups)
+	}
+	return git.GroupDiffsByDir(change)
+}
+
+// aiGroupChanges asks the AI to partition the changed files into logical groups
+// and returns them only when the response parses and covers every changed file.
+func (s *CommitService) aiGroupChanges(ctx context.Context, change domain.Change, branch string) ([]git.FileGroup, bool) {
+	_, userPrompt, err := s.grp.Build(prompts.GroupPromptInput{
+		Diff:   change.Diff,
+		Branch: branch,
+	})
+	if err != nil {
+		return nil, false
+	}
+
+	system := "You are an expert software engineer. Partition the changed files into logical groups and return JSON."
+	resp, err := s.ai.Generate(ctx, ai.Request{
+		SystemPrompt: system,
+		UserPrompt:   userPrompt,
+	})
+	if err != nil {
+		return nil, false
+	}
+
+	groups, err := parseGroupPlan(resp.Text)
+	if err != nil {
+		return nil, false
+	}
+
+	// Every changed file must be assigned to exactly one group; otherwise the
+	// plan is incomplete and we must not drop changes silently.
+	covered := make(map[string]bool)
+	for _, g := range groups {
+		for _, f := range g.Files {
+			covered[f] = true
+		}
+	}
+	for _, f := range git.FilesInDiff(change) {
+		if !covered[f] {
+			return nil, false
+		}
+	}
+	return groups, true
+}
+
+// groupPlan is the JSON shape returned by the AI grouping prompt.
+type groupPlan struct {
+	Groups []struct {
+		Name  string   `json:"name"`
+		Files []string `json:"files"`
+	} `json:"groups"`
+}
+
+// parseGroupPlan parses the AI grouping response into file groups.
+// It tolerates markdown fences and surrounding commentary.
+func parseGroupPlan(text string) ([]git.FileGroup, error) {
+	cleaned := cleanResponse(text)
+	start := strings.Index(cleaned, "{")
+	end := strings.LastIndex(cleaned, "}")
+	if start < 0 || end <= start {
+		return nil, errors.New("no JSON object found in AI grouping response")
+	}
+
+	var plan groupPlan
+	if err := json.Unmarshal([]byte(cleaned[start:end+1]), &plan); err != nil {
+		return nil, fmt.Errorf("parsing AI grouping response: %w", err)
+	}
+	if len(plan.Groups) == 0 {
+		return nil, errors.New("AI grouping returned no groups")
+	}
+
+	groups := make([]git.FileGroup, 0, len(plan.Groups))
+	for _, g := range plan.Groups {
+		name := strings.TrimSpace(g.Name)
+		if name == "" {
+			return nil, errors.New("AI grouping returned a group without a name")
+		}
+		var files []string
+		seen := make(map[string]bool)
+		for _, f := range g.Files {
+			f = strings.TrimSpace(f)
+			if f == "" || seen[f] {
+				continue
+			}
+			seen[f] = true
+			files = append(files, f)
+		}
+		if len(files) == 0 {
+			return nil, fmt.Errorf("AI grouping returned group %q with no files", name)
+		}
+		groups = append(groups, git.FileGroup{Name: name, Files: files})
+	}
+	return groups, nil
 }
 
 func (s *CommitService) checkStaged(ctx context.Context) error {

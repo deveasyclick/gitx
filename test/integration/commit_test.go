@@ -134,7 +134,7 @@ func Login() string {
 	}
 
 	gitClient := git.NewExecClient(repoDir)
-	svc := services.NewCommitService(gitClient, mockProvider, prompts.NewCommitBuilder())
+	svc := services.NewCommitService(gitClient, mockProvider, prompts.NewCommitBuilder(), prompts.NewGroupBuilder())
 
 	ctx := context.Background()
 	result, err := svc.Generate(ctx, services.CommitModeStaged)
@@ -180,7 +180,7 @@ func main() {}
 	}
 
 	gitClient := git.NewExecClient(repoDir)
-	svc := services.NewCommitService(gitClient, mockProvider, prompts.NewCommitBuilder())
+	svc := services.NewCommitService(gitClient, mockProvider, prompts.NewCommitBuilder(), prompts.NewGroupBuilder())
 
 	result, err := svc.Generate(context.Background(), services.CommitModeStaged)
 	if err != nil {
@@ -297,7 +297,7 @@ func TestCommitIntegration_NoStagedChanges(t *testing.T) {
 	// No files staged
 
 	gitClient := git.NewExecClient(repoDir)
-	svc := services.NewCommitService(gitClient, &mockAIProvider{}, prompts.NewCommitBuilder())
+	svc := services.NewCommitService(gitClient, &mockAIProvider{}, prompts.NewCommitBuilder(), prompts.NewGroupBuilder())
 
 	_, err := svc.Generate(context.Background(), services.CommitModeStaged)
 	if err == nil {
