@@ -611,9 +611,9 @@ type mockGit struct {
 	diffFrom, diffTo string
 }
 
-func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error)         { return m.diff, m.err }
-func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error)       { return m.diff, m.err }
-func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error)     { return m.diff, m.err }
+func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error)     { return m.diff, m.err }
+func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error)   { return m.diff, m.err }
+func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error) { return m.diff, m.err }
 func (m *mockGit) DiffRange(_ context.Context, from, to string) (domain.Change, error) {
 	m.diffFrom, m.diffTo = from, to
 	return m.diff, m.err

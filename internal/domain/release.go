@@ -4,9 +4,9 @@ package domain
 type ReleaseInfo struct {
 	BaseBranch     string
 	HeadBranch     string
-	CurrentVersion string   // e.g. "v1.2.0" — "" if no tags exist
-	NextVersion    string   // suggested version for this release
-	LatestTag      string   // most recent tag before head (for range comparison)
+	CurrentVersion string // e.g. "v1.2.0" — "" if no tags exist
+	NextVersion    string // suggested version for this release
+	LatestTag      string // most recent tag before head (for range comparison)
 	Commits        []CommitSummary
 	Diff           Change
 }
