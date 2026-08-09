@@ -13,3 +13,5 @@ build-errors.log
 
 # project config may contain API keys
 .gitx/config.yaml
+reasonix.toml
+.reasonix/**
