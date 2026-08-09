@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/user/gitx/internal/domain"
 	"github.com/user/gitx/internal/git"
 	"github.com/user/gitx/internal/prompts"
 )
@@ -41,6 +43,30 @@ func TestChangelogService_GenerateRange_Success(t *testing.T) {
 	}
 }
 
+func TestChangelogService_GenerateRange_IncludesDiff(t *testing.T) {
+	mock := &mockGit{
+		log: []git.CommitLog{
+			{Hash: "abc1234", Message: "in progress"},
+		},
+		diff: domain.Change{
+			Diff:     "diff --git a/auth.go b/auth.go\n@@ -1 +1 @@\n-old\n+new auth",
+			DiffStat: "1 file changed",
+		},
+	}
+	aiMock := &mockAI{text: "## Added\n- New auth"}
+	svc := NewChangelogService(mock, aiMock, prompts.NewChangelogBuilder())
+
+	if _, err := svc.GenerateRange(context.Background(), "v1.0.0", "v2.0.0"); err != nil {
+		t.Fatalf("GenerateRange: %v", err)
+	}
+	if mock.diffFrom != "v1.0.0" || mock.diffTo != "v2.0.0" {
+		t.Errorf("expected DiffRange v1.0.0..v2.0.0, got %s..%s", mock.diffFrom, mock.diffTo)
+	}
+	if !strings.Contains(aiMock.lastUserPrompt, "auth.go") {
+		t.Errorf("prompt should include diff content, got: %s", aiMock.lastUserPrompt)
+	}
+}
+
 func TestChangelogService_GenerateLatest_Success(t *testing.T) {
 	svc := NewChangelogService(
 		&mockGit{
@@ -63,6 +89,28 @@ func TestChangelogService_GenerateLatest_Success(t *testing.T) {
 	}
 	if result.Entries[0].Version != "v2.0.0" {
 		t.Errorf("Version = %q", result.Entries[0].Version)
+	}
+}
+
+func TestChangelogService_GenerateLatest_SingleTag(t *testing.T) {
+	mock := &mockGit{
+		tags: []string{"v1.0.0"},
+		log:  []git.CommitLog{{Hash: "abc1234", Message: "feat: unreleased work"}},
+	}
+	svc := NewChangelogService(mock, &mockAI{text: "## Added\n- Unreleased work"}, prompts.NewChangelogBuilder())
+
+	result, err := svc.GenerateLatest(context.Background())
+	if err != nil {
+		t.Fatalf("GenerateLatest: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	if result.Entries[0].Version != "Unreleased" {
+		t.Errorf("Version = %q, want %q", result.Entries[0].Version, "Unreleased")
+	}
+	if mock.logFrom != "v1.0.0" || mock.logTo != "HEAD" {
+		t.Errorf("expected range v1.0.0..HEAD, got %s..%s", mock.logFrom, mock.logTo)
 	}
 }
 

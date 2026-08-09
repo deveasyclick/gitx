@@ -47,12 +47,17 @@ func (s *ChangelogService) GenerateLatest(ctx context.Context) (*ChangelogResult
 	}
 
 	latest := tags[0]
-	var from string
-	if len(tags) >= 2 {
-		from = tags[1]
+	if len(tags) == 1 {
+		// Only one tag exists: describe unreleased changes since that tag
+		// (tag..HEAD) instead of the empty range ..<tag>.
+		result, err := s.GenerateRange(ctx, latest, "HEAD")
+		if err == nil && len(result.Entries) > 0 {
+			result.Entries[0].Version = "Unreleased"
+		}
+		return result, err
 	}
 
-	return s.GenerateRange(ctx, from, latest)
+	return s.GenerateRange(ctx, tags[1], latest)
 }
 
 // GenerateRange generates a changelog entry for a commit range.
@@ -67,10 +72,19 @@ func (s *ChangelogService) GenerateRange(ctx context.Context, from, to string) (
 		return nil, fmt.Errorf("no commits found in range %s..%s", from, to)
 	}
 
+	// The diff is the primary source for the changelog; commits are context.
+	var diff domain.Change
+	if from != "" && to != "" {
+		if d, err := s.git.DiffRange(ctx, from, to); err == nil {
+			diff = d
+		}
+	}
+
 	system, userPrompt, err := s.pmpt.Build(prompts.ChangelogPromptInput{
 		From:    from,
 		To:      to,
 		Commits: logs,
+		Diff:    diff.Diff,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("building prompt: %w", err)

@@ -9,6 +9,7 @@ GitX is an AI-powered command-line Git assistant that improves developer product
 - **`gitx commit`** — Generate commit messages from staged or unstaged changes with interactive confirmation
 - **`gitx describe`** — Describe the current repository state (commits, staged, and/or unstaged changes)
 - **`gitx changelog`** — Generate changelog entries from git tags and commits
+- **`gitx release`** — Orchestrate releases: compare branches, generate changelog, bump versions, create PR descriptions
 - **`gitx setup`** — Interactive configuration: pick provider, model, and API key
 - **`gitx config`** — Manage configuration (provider, model, API key, commit style)
 - **`gitx doctor`** — Diagnose installation and configuration issues
@@ -287,6 +288,86 @@ gitx changelog --output CHANGELOG.md       # Write to file
 ```
 
 **Output sections:** Added, Fixed, Changed, Removed
+
+### `gitx release`
+
+Orchestrate the full release workflow: compare branches, generate changelog, bump versions, and create a PR description.
+
+```bash
+gitx release --base main                          # Compare current branch against main
+gitx release --base main --bump major             # Force major version bump
+gitx release --base main --version v2.0.0         # Explicit version
+gitx release --base main --no-changelog           # Skip changelog generation
+gitx release --base main --no-version             # Skip version bumping
+gitx release --base main --no-pr                  # Skip PR description
+gitx release --changelog docs/CHANGELOG.md        # Custom changelog path
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--base` | Base branch to compare against (required, e.g., `main`, `master`). |
+| `--version` | Explicit version string (e.g., `v1.2.3`). Skips AI suggestion. |
+| `--bump` | Version bump type: `major`, `minor`, or `patch`. AI-suggested if not set. |
+| `--changelog` | Path to changelog file (default `CHANGELOG.md`). |
+| `--no-changelog` | Skip changelog generation and file update. |
+| `--no-version` | Skip version bumping in files. |
+| `--no-pr` | Skip PR description generation. |
+| `--pr` | Generate PR description without asking (default: asks interactively). |
+
+**Interactive workflow:**
+
+```
+🔍 Comparing branches...
+
+📦 Release Comparison
+
+  Base branch:  main
+  Head branch:  feature/login
+  Commits:      12 commit(s) ahead
+  Changes:      8 files changed, 245 insertions(+), 30 deletions(-)
+
+Commits in head not in base:
+  • a1b2c3d feat: add OAuth login flow
+  • e4f5g6h fix: handle token refresh edge case
+  • i7j8k9l feat: add user profile page
+  ... and 9 more
+
+Ready to release? [y/N]
+```
+
+Once confirmed, the workflow proceeds through these steps:
+
+| Step | What happens |
+|------|-------------|
+| **1. Version** | AI analyzes commits to suggest a version bump (major/minor/patch). User can accept, edit, or use `--version` to skip. |
+| **2. Branch** | Choose to release on the current branch or create a `release/vX.Y.Z` branch. |
+| **3. Changelog** | AI generates categorized changelog sections (Added, Fixed, Changed, Removed). Interactive loop: Accept / Regenerate / Copy / Edit. Written to `CHANGELOG.md`. |
+| **4. Version bump** | Updates `version` in `package.json` and `package-lock.json` (when present). |
+| **5. PR description** | Optional — asks whether to generate. If yes, AI generates a full PR description with summary, changelog, testing notes, and checklist. Interactive loop: Accept / Copy / Edit. Use `--pr` to skip the prompt or `--no-pr` to skip entirely. |
+| **6. Instructions** | Prints `git checkout -b`, `git commit`, and `git tag` commands to complete the release. |
+
+**Changelog interaction loop:**
+
+```
+[A] Accept  [R] Regenerate  [C] Copy  [E] Edit
+(default: Accept):
+```
+
+| Option | Behavior |
+|--------|----------|
+| **A** (Accept) | Confirms the changelog entry and writes it to the file |
+| **R** (Regenerate) | Generates a new changelog entry with AI |
+| **C** (Copy) | Copies to clipboard for manual review |
+| **E** (Edit) | Opens `$EDITOR` for manual editing |
+
+**Supported version files:**
+
+- `package.json` — `"version": "x.y.z"`
+- `package-lock.json` — `"version": "x.y.z"`
+
+Additional file types can be added by extending `BumpVersionInFiles()` in the release service.
 
 ### `gitx config`
 

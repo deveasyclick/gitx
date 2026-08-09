@@ -600,19 +600,28 @@ func contains(s, substr string) bool {
 // --- Mocks ---
 
 type mockGit struct {
-	status         git.StagedChanges
-	unstagedStatus git.StagedChanges
-	diff           domain.Change
-	repo           domain.RepoInfo
-	log            []git.CommitLog
-	tags           []string
-	err            error
+	status           git.StagedChanges
+	unstagedStatus   git.StagedChanges
+	diff             domain.Change
+	repo             domain.RepoInfo
+	log              []git.CommitLog
+	tags             []string
+	err              error
+	logFrom, logTo   string
+	diffFrom, diffTo string
 }
 
 func (m *mockGit) DiffCached(_ context.Context) (domain.Change, error)         { return m.diff, m.err }
 func (m *mockGit) DiffUnstaged(_ context.Context) (domain.Change, error)       { return m.diff, m.err }
 func (m *mockGit) Diff(_ context.Context, _ string) (domain.Change, error)     { return m.diff, m.err }
-func (m *mockGit) Log(_ context.Context, _, _ string) ([]git.CommitLog, error) { return m.log, m.err }
+func (m *mockGit) DiffRange(_ context.Context, from, to string) (domain.Change, error) {
+	m.diffFrom, m.diffTo = from, to
+	return m.diff, m.err
+}
+func (m *mockGit) Log(_ context.Context, from, to string) ([]git.CommitLog, error) {
+	m.logFrom, m.logTo = from, to
+	return m.log, m.err
+}
 func (m *mockGit) RecentCommits(_ context.Context, _ int, _ string) ([]git.CommitLog, error) {
 	return m.log, m.err
 }
@@ -628,19 +637,24 @@ func (m *mockGit) StageAll(_ context.Context) error                    { return 
 func (m *mockGit) UnstageAll(_ context.Context) error                  { return m.err }
 
 type mockAI struct {
-	text  string   // fallback text returned when texts is empty
-	texts []string // queued responses; each Generate call pops the next
-	errs  []error  // queued errors parallel to texts; nil entry means no error
+	text           string   // fallback text returned when texts is empty
+	err            error    // single error; returned when errs is empty
+	texts          []string // queued responses; each Generate call pops the next
+	errs           []error  // queued errors parallel to texts; nil entry means no error
+	lastUserPrompt string
 }
 
 func (m *mockAI) Name() string { return "mock" }
 func (m *mockAI) Generate(_ context.Context, req ai.Request) (ai.Response, error) {
+	m.lastUserPrompt = req.UserPrompt
 	if len(m.errs) > 0 {
 		err := m.errs[0]
 		m.errs = m.errs[1:]
 		if err != nil {
 			return ai.Response{}, err
 		}
+	} else if m.err != nil {
+		return ai.Response{}, m.err
 	}
 	text := m.text
 	if len(m.texts) > 0 {

@@ -13,10 +13,5 @@ build-errors.log
 
 # project config may contain API keys
 .gitx/config.yaml
-.reasonix/tasks/20260809-053631.639917726-deepseek-v4-flash--bash-1/events.jsonl
-.reasonix/tasks/20260809-053631.639917726-deepseek-v4-flash--bash-1/snapshot.json
-.reasonix/tasks/20260809-053631.639917726-deepseek-v4-flash--bash-1/task.lock
-.reasonix/tasks/20260809-053631.639917726-deepseek-v4-flash--bash-2/events.jsonl
-.reasonix/tasks/20260809-053631.639917726-deepseek-v4-flash--bash-2/snapshot.json
-.reasonix/tasks/20260809-053631.639917726-deepseek-v4-flash--bash-2/task.lock
 reasonix.toml
+.reasonix/**
