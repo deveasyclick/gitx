@@ -485,7 +485,7 @@ func TestUpdateChangelogFile_ReplaceExistingVersion(t *testing.T) {
 	idx110 := strings.Index(content, "## v1.1.0")
 	idx100 := strings.Index(content, "## v1.0.0")
 	idx090 := strings.Index(content, "## v0.9.0")
-	if !(idx110 < idx100 && idx100 < idx090) {
+	if idx110 >= idx100 || idx100 >= idx090 {
 		t.Errorf("entry order should be preserved, got v1.1.0=%d v1.0.0=%d v0.9.0=%d", idx110, idx100, idx090)
 	}
 }

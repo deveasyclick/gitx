@@ -82,9 +82,7 @@ func TestMergeAPIKey(t *testing.T) {
 func TestLoadDefaultsWhenNoFiles(t *testing.T) {
 	// Temporarily set HOME to an isolated dir with no config
 	home := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", home)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", home)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -103,9 +101,7 @@ func TestLoadDefaultsWhenNoFiles(t *testing.T) {
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
 	home := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", home)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", home)
 
 	saved := &config.Config{}
 	saved.AI.Provider = "anthropic"
