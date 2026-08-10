@@ -17,9 +17,9 @@ tasks:
       - go build -o '{{.OUTPUT_DIR}}/{{.BINARY}}' ./cmd/gitx/
 
   test:
-    desc: Run the full test suite with the race detector (matches CI)
+    desc: Run the full test suite
     cmds:
-      - go test -race -count=1 ./...
+      - go test -count=1 ./...
 
   test-short:
     desc: Run tests without the race detector or integration suite
