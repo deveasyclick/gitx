@@ -122,7 +122,7 @@ func gitInit(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	cmd := exec.Command("git", "init")
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
