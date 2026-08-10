@@ -2,9 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,40 +67,6 @@ func gitAdd(t *testing.T, dir string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git add: %v\n%s", err, out)
 	}
-}
-
-// startMockAI creates a test server that returns a canned AI response.
-func startMockAI(t *testing.T, responseText string) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify it's a chat completions request
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Method != "POST" {
-			t.Errorf("unexpected method: %s", r.Method)
-		}
-
-		// Return canned response
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id": "test-cmpl",
-			"choices": []map[string]interface{}{
-				{
-					"index": 0,
-					"message": map[string]interface{}{
-						"role":    "assistant",
-						"content": responseText,
-					},
-				},
-			},
-			"usage": map[string]interface{}{
-				"prompt_tokens":     50,
-				"completion_tokens": 10,
-				"total_tokens":      60,
-			},
-		})
-	}))
 }
 
 func TestCommitIntegration_EndToEnd(t *testing.T) {
