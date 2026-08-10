@@ -39,26 +39,24 @@ func askGeneratePR() bool {
 
 func askVersion(suggested, current string) string {
 	reader := bufio.NewReader(os.Stdin)
-	for {
-		currentDisplay := current
-		if currentDisplay == "" {
-			currentDisplay = "(none)"
-		}
-		fmt.Printf("\nCurrent version: %s\n", currentDisplay)
-		fmt.Printf("Suggested version: %s\n", suggested)
-		fmt.Print("Enter version or press Enter to accept: v")
-
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		if input == "" {
-			return suggested
-		}
-		// Ensure v prefix
-		if !strings.HasPrefix(input, "v") {
-			input = "v" + input
-		}
-		return input
+	currentDisplay := current
+	if currentDisplay == "" {
+		currentDisplay = "(none)"
 	}
+	fmt.Printf("\nCurrent version: %s\n", currentDisplay)
+	fmt.Printf("Suggested version: %s\n", suggested)
+	fmt.Print("Enter version or press Enter to accept: v")
+
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return suggested
+	}
+	// Ensure v prefix
+	if !strings.HasPrefix(input, "v") {
+		input = "v" + input
+	}
+	return input
 }
 
 func askReleaseBranch(version, currentBranch string) (bool, string) {

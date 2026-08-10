@@ -90,7 +90,7 @@ Rules:
 
 	// Build user prompt
 	var parts []string
-	parts = append(parts, fmt.Sprintf("Describe the current state of this repository."))
+	parts = append(parts, "Describe the current state of this repository.")
 	parts = append(parts, fmt.Sprintf("Branch: %s", input.Branch))
 
 	if commitSummary != "" {

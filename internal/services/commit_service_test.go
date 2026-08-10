@@ -587,7 +587,7 @@ func TestCut(t *testing.T) {
 		t.Errorf("cut(a\\n\\nb) = (%q, %q, %v)", before, after, found)
 	}
 
-	before, after, found = cut("no-separator", "\n\n")
+	_, _, found = cut("no-separator", "\n\n")
 	if found {
 		t.Errorf("expected not found")
 	}

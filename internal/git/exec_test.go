@@ -518,7 +518,7 @@ func TestExecClient_Diff(t *testing.T) {
 	gitCommit(t, dir, "initial")
 
 	// Create a new branch and make changes
-	exec.Command("git", "-C", dir, "checkout", "-b", "feature").Run()
+	_ = exec.Command("git", "-C", dir, "checkout", "-b", "feature").Run()
 	gitWriteFile(t, dir, "feature.go", "package feature\n")
 	gitAdd(t, dir)
 	gitCommit(t, dir, "feat: add feature")

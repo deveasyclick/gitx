@@ -51,7 +51,7 @@ func TestOpenAICompatibleClient_Generate_Success(t *testing.T) {
 
 		// Return success
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(chatResponse{
+		_ = json.NewEncoder(w).Encode(chatResponse{
 			ID: "cmpl-1",
 			Choices: []chatChoice{
 				{Index: 0, Message: chatMessage{Role: "assistant", Content: "feat: add login"}},
@@ -96,7 +96,7 @@ func TestOpenAICompatibleClient_Generate_Success(t *testing.T) {
 func TestOpenAICompatibleClient_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error": {"message": "Incorrect API key", "type": "auth_error"}}`))
+		_, _ = w.Write([]byte(`{"error": {"message": "Incorrect API key", "type": "auth_error"}}`))
 	}))
 	defer server.Close()
 
@@ -120,7 +120,7 @@ func TestOpenAICompatibleClient_APIError(t *testing.T) {
 func TestOpenAICompatibleClient_EmptyChoices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(chatResponse{
+		_ = json.NewEncoder(w).Encode(chatResponse{
 			ID:      "cmpl-2",
 			Choices: []chatChoice{},
 		})
@@ -175,7 +175,7 @@ func TestOpenAICompatibleClient_CustomMaxTokens(t *testing.T) {
 			t.Errorf("max_tokens = %d, want 4096", body.MaxTokens)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(chatResponse{
+		_ = json.NewEncoder(w).Encode(chatResponse{
 			Choices: []chatChoice{
 				{Message: chatMessage{Role: "assistant", Content: "ok"}},
 			},

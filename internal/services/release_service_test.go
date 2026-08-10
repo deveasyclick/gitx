@@ -582,9 +582,14 @@ func TestUpdateChangelogFile_RepairsExistingDuplicates(t *testing.T) {
 func TestBumpVersionInFiles_PackageJSON(t *testing.T) {
 	svc := NewReleaseService(nil, nil, prompts.NewReleaseBuilder())
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
 
 	// Create test package.json
 	pkgJSON := `{
@@ -618,15 +623,24 @@ func TestBumpVersionInFiles_PackageJSON(t *testing.T) {
 func TestBumpVersionInFiles_BothFiles(t *testing.T) {
 	svc := NewReleaseService(nil, nil, prompts.NewReleaseBuilder())
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
 
 	// Create both files
 	pkgJSON := `{"name":"test","version":"1.0.0"}`
 	lockJSON := `{"name":"test","version":"1.0.0","lockfileVersion":1}`
-	os.WriteFile("package.json", []byte(pkgJSON), 0o644)
-	os.WriteFile("package-lock.json", []byte(lockJSON), 0o644)
+	if err := os.WriteFile("package.json", []byte(pkgJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile("package-lock.json", []byte(lockJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	modified, err := svc.BumpVersionInFiles("v2.0.0")
 	if err != nil {
@@ -649,9 +663,14 @@ func TestBumpVersionInFiles_BothFiles(t *testing.T) {
 func TestBumpVersionInFiles_NoFiles(t *testing.T) {
 	svc := NewReleaseService(nil, nil, prompts.NewReleaseBuilder())
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
 
 	modified, err := svc.BumpVersionInFiles("v1.0.0")
 	if err != nil {

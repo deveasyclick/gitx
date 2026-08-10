@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/user/gitx/internal/ui"
 )
@@ -66,10 +64,4 @@ func outputLevel() ui.OutputLevel {
 		return ui.OutputVerbose
 	}
 	return ui.OutputNormal
-}
-
-func verboseLn(msg string) {
-	if verbose {
-		fmt.Println(msg)
-	}
 }

@@ -397,7 +397,9 @@ func SuggestNextVersion(current string, bump string) string {
 
 func nextNum(s string) string {
 	var n int
-	fmt.Sscanf(s, "%d", &n)
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return "1" // no leading number — treat the segment as 0
+	}
 	return fmt.Sprintf("%d", n+1)
 }
 

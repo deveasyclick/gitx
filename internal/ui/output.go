@@ -35,7 +35,7 @@ func PrintCommitMessage(msg domain.CommitMessage, level OutputLevel) {
 	switch level {
 	case OutputJSON:
 		enc := json.NewEncoder(Stdout)
-		enc.Encode(Result{
+		_ = enc.Encode(Result{
 			Command: "commit",
 			Title:   msg.Title,
 			Body:    msg.Body,

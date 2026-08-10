@@ -16,7 +16,6 @@ import (
 )
 
 type commitFlags struct {
-	dryRun   bool
 	provider string
 	model    string
 	staged   bool
