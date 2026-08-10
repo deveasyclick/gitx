@@ -115,7 +115,7 @@ func (c *openAICompatibleClient) Generate(ctx context.Context, req Request) (Res
 	if err != nil {
 		return Response{}, fmt.Errorf("http request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

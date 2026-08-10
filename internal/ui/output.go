@@ -23,6 +23,12 @@ const (
 var Stdout io.Writer = os.Stdout
 var Stderr io.Writer = os.Stderr
 
+// printLine writes a line to w. Write errors are ignored: display output is
+// best-effort and there is nothing sensible a caller can do with the error.
+func printLine(w io.Writer, args ...any) {
+	_, _ = fmt.Fprintln(w, args...)
+}
+
 // Result is a structured result for JSON output.
 type Result struct {
 	Command string `json:"command"`
@@ -41,42 +47,42 @@ func PrintCommitMessage(msg domain.CommitMessage, level OutputLevel) {
 			Body:    msg.Body,
 		})
 	default:
-		fmt.Fprintln(Stdout)
-		fmt.Fprintln(Stdout, "Generated commit:")
-		fmt.Fprintln(Stdout)
-		fmt.Fprintln(Stdout, msg.Title)
+		printLine(Stdout)
+		printLine(Stdout, "Generated commit:")
+		printLine(Stdout)
+		printLine(Stdout, msg.Title)
 		if msg.Body != "" {
-			fmt.Fprintln(Stdout)
-			fmt.Fprintln(Stdout, msg.Body)
+			printLine(Stdout)
+			printLine(Stdout, msg.Body)
 		}
-		fmt.Fprintln(Stdout)
+		printLine(Stdout)
 	}
 }
 
 // PrintInfo prints an informational message.
 func PrintInfo(msg string) {
-	fmt.Fprintln(Stdout, msg)
+	printLine(Stdout, msg)
 }
 
 // PrintSuccess prints a success message.
 func PrintSuccess(msg string) {
-	fmt.Fprintln(Stdout, msg)
+	printLine(Stdout, msg)
 }
 
 // PrintWarning prints a warning message.
 func PrintWarning(msg string) {
-	fmt.Fprintln(Stderr, msg)
+	printLine(Stderr, msg)
 }
 
 // PrintError prints an error message.
 func PrintError(msg string) {
-	fmt.Fprintln(Stderr, "Error:", msg)
+	printLine(Stderr, "Error:", msg)
 }
 
 // PrintVerbose prints a message only in verbose mode.
 func PrintVerbose(msg string, level OutputLevel) {
 	if level >= OutputVerbose {
-		fmt.Fprintln(Stderr, msg)
+		printLine(Stderr, msg)
 	}
 }
 

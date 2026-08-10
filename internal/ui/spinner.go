@@ -32,10 +32,10 @@ func (s *Spinner) Start() {
 			select {
 			case <-s.done:
 				// Clear the line
-				fmt.Fprint(Stderr, "\r\033[K")
+				_, _ = fmt.Fprint(Stderr, "\r\033[K")
 				return
 			default:
-				fmt.Fprintf(Stderr, "\r%s %s", s.frames[i%len(s.frames)], s.msg)
+				_, _ = fmt.Fprintf(Stderr, "\r%s %s", s.frames[i%len(s.frames)], s.msg)
 				i++
 				time.Sleep(80 * time.Millisecond)
 			}
@@ -53,7 +53,7 @@ func (s *Spinner) StopWithMessage(doneMsg string) {
 	s.done <- true
 	// Small delay to ensure the last frame is cleared
 	time.Sleep(10 * time.Millisecond)
-	fmt.Fprintf(Stderr, "\r\033[K%s\n", doneMsg)
+	_, _ = fmt.Fprintf(Stderr, "\r\033[K%s\n", doneMsg)
 }
 
 // IsInteractive returns true if stderr is a terminal (spinner support).
