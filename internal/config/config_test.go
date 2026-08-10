@@ -141,7 +141,6 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
-
 func TestKnownModels(t *testing.T) {
 	tests := []struct {
 		provider string

@@ -142,8 +142,6 @@ func (c *Config) Merge(other *Config) {
 	}
 }
 
-
-
 // Save writes cfg to ~/.config/gitx/config.yaml, creating parent directories as needed.
 func Save(cfg *Config) error {
 	path, err := configPath()

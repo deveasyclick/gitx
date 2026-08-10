@@ -22,10 +22,10 @@ func newDoctorCmd() *cobra.Command {
 }
 
 type checkResult struct {
-	name    string
-	status  string // "✓" or "✗"
-	detail  string
-	fix     string // suggested fix, empty if no issue
+	name   string
+	status string // "✓" or "✗"
+	detail string
+	fix    string // suggested fix, empty if no issue
 }
 
 func doctorRun() error {
