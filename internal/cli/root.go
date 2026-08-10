@@ -63,6 +63,7 @@ func init() {
 	rootCmd.AddCommand(newSetupCmd())
 	rootCmd.AddCommand(newDoctorCmd())
 	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newUpdateCmd())
 
 	// Disable the built-in completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -97,9 +98,9 @@ func maybeCheckForUpdates() {
 	if !ui.IsInteractive() {
 		return
 	}
-	// doctor reports its own update status; avoid a duplicate notice.
+	// doctor and update report their own update status; avoid a duplicate notice.
 	for _, arg := range os.Args[1:] {
-		if arg == "doctor" {
+		if arg == "doctor" || arg == "update" {
 			return
 		}
 	}
@@ -115,9 +116,9 @@ func maybeCheckForUpdates() {
 		return // fail open: an update check never breaks a command
 	}
 
-	fmt.Fprintf(ui.Stderr, "\n⚠️  A new version of gitx is available: %s (you have %s)\n", latest, currentVersion)
-	fmt.Fprintf(ui.Stderr, "    Update: curl -fsSL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh\n", gitxRepo)
-	fmt.Fprintf(ui.Stderr, "    See:    https://github.com/%s/releases/tag/%s\n\n", gitxRepo, latest)
+	_, _ = fmt.Fprintf(ui.Stderr, "\n⚠️  A new version of gitx is available: %s (you have %s)\n", latest, currentVersion)
+	_, _ = fmt.Fprintf(ui.Stderr, "    Update: curl -fsSL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh\n", gitxRepo)
+	_, _ = fmt.Fprintf(ui.Stderr, "    See:    https://github.com/%s/releases/tag/%s\n\n", gitxRepo, latest)
 }
 
 // updateCacheDir returns the directory used to cache update checks, or ""

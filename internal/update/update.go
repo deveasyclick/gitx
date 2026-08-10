@@ -48,21 +48,33 @@ func Check(ctx context.Context, current string, opts Options) (string, error) {
 	return "", nil
 }
 
-// LatestVersion fetches the tag of the latest non-prerelease release from the
-// GitHub Releases API.
-func LatestVersion(ctx context.Context, opts Options) (string, error) {
+// Release is a GitHub release with its download assets.
+type Release struct {
+	TagName string  `json:"tag_name"`
+	Assets  []Asset `json:"assets"`
+}
+
+// Asset is a downloadable file attached to a release.
+type Asset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
+}
+
+// LatestRelease fetches the latest non-prerelease release from the GitHub
+// Releases API, including its assets.
+func LatestRelease(ctx context.Context, opts Options) (Release, error) {
 	base := opts.BaseURL
 	if base == "" {
 		base = "https://api.github.com"
 	}
 	if opts.Repo == "" {
-		return "", fmt.Errorf("update: repo is required")
+		return Release{}, fmt.Errorf("update: repo is required")
 	}
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", base, opts.Repo)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", fmt.Errorf("update: creating request: %w", err)
+		return Release{}, fmt.Errorf("update: creating request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
@@ -74,21 +86,34 @@ func LatestVersion(ctx context.Context, opts Options) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("update: fetching latest release: %w", err)
+		return Release{}, fmt.Errorf("update: fetching latest release: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("update: unexpected status %s", resp.Status)
+		return Release{}, fmt.Errorf("update: unexpected status %s", resp.Status)
 	}
 
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
+	var release Release
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", fmt.Errorf("update: decoding response: %w", err)
+		return Release{}, fmt.Errorf("update: decoding response: %w", err)
+	}
+	return release, nil
+}
+
+// LatestVersion fetches the tag of the latest non-prerelease release.
+func LatestVersion(ctx context.Context, opts Options) (string, error) {
+	release, err := LatestRelease(ctx, opts)
+	if err != nil {
+		return "", err
 	}
 	return strings.TrimSpace(release.TagName), nil
+}
+
+// CacheLatestVersion records the latest known version so subsequent checks
+// skip the network until the entry expires.
+func CacheLatestVersion(cacheDir, latest string) {
+	_ = writeCache(cacheDir, latest)
 }
 
 // IsNewer reports whether latest is strictly newer than current. Both are
