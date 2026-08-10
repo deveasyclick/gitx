@@ -1,0 +1,67 @@
+version: '3'
+
+vars:
+  BINARY: gitx
+  OUTPUT_DIR: bin
+
+tasks:
+  default:
+    desc: Build the gitx binary into bin/
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the gitx binary into bin/
+    cmds:
+      - mkdir -p '{{.OUTPUT_DIR}}'
+      - go build -o '{{.OUTPUT_DIR}}/{{.BINARY}}' ./cmd/gitx/
+
+  test:
+    desc: Run the full test suite with the race detector (matches CI)
+    cmds:
+      - go test -race -count=1 ./...
+
+  test-short:
+    desc: Run tests without the race detector or integration suite
+    cmds:
+      - go test -count=1 -short ./...
+
+  vet:
+    desc: Run go vet on all packages
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: "Run golangci-lint (note: CI uses golangci-lint v2 via the action)"
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Check that all tracked Go files are gofmt-formatted
+    cmds:
+      - |
+        unformatted=$(gofmt -l $(git ls-files '*.go'))
+        if [ -n "$unformatted" ]; then
+          echo "Unformatted files:"
+          printf '%s\n' "$unformatted"
+          exit 1
+        fi
+        echo "All Go files are formatted."
+
+  check:
+    desc: Run the full CI check suite locally (fmt, lint, vet, test)
+    deps:
+      - fmt
+      - lint
+      - vet
+      - test
+
+  dev:
+    desc: Live-reload development server
+    cmds:
+      - air
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf '{{.OUTPUT_DIR}}'
