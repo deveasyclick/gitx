@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/user/gitx/internal/config"
 	"github.com/user/gitx/internal/git"
+	"github.com/user/gitx/internal/update"
 )
 
 func newDoctorCmd() *cobra.Command {
@@ -34,6 +36,9 @@ func doctorRun() error {
 	fmt.Println()
 
 	var results []checkResult
+
+	// 0. Check version / update
+	results = append(results, checkUpdate())
 
 	// 1. Check git installation
 	results = append(results, checkGit())
@@ -82,6 +87,27 @@ func doctorRun() error {
 	}
 
 	return nil
+}
+
+func checkUpdate() checkResult {
+	if currentVersion == "" || currentVersion == "dev" {
+		return checkResult{name: "Version", status: "✓", detail: "dev build (update check skipped)"}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	latest, err := update.Check(ctx, currentVersion, update.Options{
+		Repo:     gitxRepo,
+		CacheDir: updateCacheDir(),
+	})
+	if err != nil {
+		return checkResult{name: "Version", status: "✓", detail: fmt.Sprintf("%s (update check unavailable)", currentVersion)}
+	}
+	if latest == "" {
+		return checkResult{name: "Version", status: "✓", detail: fmt.Sprintf("%s (up to date)", currentVersion)}
+	}
+	return checkResult{name: "Version", status: "✓", detail: fmt.Sprintf("%s (update available: %s)", currentVersion, latest)}
 }
 
 func checkGit() checkResult {
