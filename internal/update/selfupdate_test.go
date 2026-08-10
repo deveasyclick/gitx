@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -176,7 +177,9 @@ func TestReplaceBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
-	if info.Mode().Perm()&0o111 == 0 {
+	// Windows has no executable permission bit (mode bits report 0666), so the
+	// exec-bit check only applies on Unix-like systems.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
 		t.Errorf("binary should be executable, got %v", info.Mode().Perm())
 	}
 	// No leftover backup or temp files.
@@ -189,6 +192,13 @@ func TestReplaceBinary(t *testing.T) {
 }
 
 func TestReplaceBinary_ReadOnlyDir(t *testing.T) {
+	// os.Chmod does not make a directory non-writable on Windows (writes are
+	// governed by ACLs, not mode bits), so this scenario is only expressible
+	// on Unix-like systems.
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only directories are enforced via ACLs on Windows; skip")
+	}
+
 	// ReplaceBinary must fail cleanly (and leave the original intact) when the
 	// directory is not writable.
 	dir := t.TempDir()

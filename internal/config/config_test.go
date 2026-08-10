@@ -3,10 +3,22 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/user/gitx/internal/config"
 )
+
+// setTestHome redirects home-directory resolution to dir. os.UserHomeDir()
+// reads HOME on Unix but USERPROFILE on Windows, so both must be set for the
+// tests to be hermetic across platforms.
+func setTestHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", dir)
+	}
+}
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -82,7 +94,7 @@ func TestMergeAPIKey(t *testing.T) {
 func TestLoadDefaultsWhenNoFiles(t *testing.T) {
 	// Temporarily set HOME to an isolated dir with no config
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -101,7 +113,7 @@ func TestLoadDefaultsWhenNoFiles(t *testing.T) {
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	saved := &config.Config{}
 	saved.AI.Provider = "anthropic"
