@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.0
+
+### Added
+
+- Add `--tag` flag to `gitx release` for tag-based releases: compare the current branch against the latest version tag, including all commits and the cumulative diff since that tag.
+
+### Fixed
+
+- Fix `package-lock.json` version bumping so it updates only the top-level version and the root `packages` entry, leaving dependency versions untouched.
+- Fix changelog markdown formatting by adding blank lines around headings and lists so generated entries pass common markdownlint rules.
+
+### Changed
+
+- Update `gitx release` so exactly one of `--base` or `--tag` is required; the two flags are now mutually exclusive.
+- Update changelog insertion to detect the existing version order (newest-first or oldest-first) and place new entries in the correct position instead of always prepending.
+- Update release comparison output to show the base tag and “commits since tag” when running with `--tag`.
+
 ## v0.2.0
 
 ### Added
