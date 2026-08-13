@@ -313,20 +313,24 @@ gitx changelog --output CHANGELOG.md</pre>
   <!-- release -->
   <div class="card" style="margin: 24px 0 16px;">
     <h4><span class="cmd">gitx release</span> — Orchestrate releases</h4>
-    <p style="margin-top: 8px;">Full release workflow: compare branches, generate changelog, bump versions, and create PR descriptions.</p>
+    <p style="margin-top: 8px;">Full release workflow: compare branches (or a version tag), generate changelog, bump versions, and create PR descriptions.</p>
   </div>
-  <pre><span class="c"># --base is required</span>
+  <pre><span class="c"># --base or --tag is required</span>
 gitx release --base main
 
 <span class="c"># Force major version bump</span>
 gitx release --base main --bump major
 
 <span class="c"># Explicit version, skip changelog</span>
-gitx release --base main --version v2.0.0 --no-changelog</pre>
+gitx release --base main --version v2.0.0 --no-changelog
+
+<span class="c"># Base the release on a version tag: all commits after the tag up to the latest commit</span>
+gitx release --tag v1.2.3</pre>
 
   <table>
     <tr><th>Flag</th><th>Description</th></tr>
-    <tr><td><code>--base</code></td><td>Base branch to compare against (required, e.g., main, master).</td></tr>
+    <tr><td><code>--base</code></td><td>Base branch to compare against (e.g., main, master). Required unless <code>--tag</code> is used.</td></tr>
+    <tr><td><code>--tag</code></td><td>Base version tag (e.g., v1.2.3): use all commits after this tag up to the latest commit. Required unless <code>--base</code> is used.</td></tr>
     <tr><td><code>--version</code></td><td>Explicit version string (e.g., v1.2.3). Skips AI suggestion.</td></tr>
     <tr><td><code>--bump</code></td><td>Version bump type: major, minor, or patch. AI-suggested if not set.</td></tr>
     <tr><td><code>--changelog</code></td><td>Path to changelog file (default CHANGELOG.md).</td></tr>
@@ -359,13 +363,13 @@ gitx release --base main --version v2.0.0 --no-changelog</pre>
 <section id="release">
   <h2><a href="#release">Release Workflow</a></h2>
 
-  <p>The <code>gitx release</code> command orchestrates an entire release — from branch comparison to changelog generation, version bumping, and PR description creation. Every step is interactive and AI-assisted.</p>
+  <p>The <code>gitx release</code> command orchestrates an entire release — from branch or version-tag comparison to changelog generation, version bumping, and PR description creation. Every step is interactive and AI-assisted.</p>
 
   <h3>Workflow steps</h3>
 
   <div class="flowchart">
     <pre style="border: none; background: none; padding: 0; font-size: 13px;">
-🔍 Compare branches  →  📦 Show diff  →  💬 Confirm release
+🔍 Compare branch or tag  →  📦 Show diff  →  💬 Confirm release
        │
        ▼
 🤖 AI suggests version (major/minor/patch)
@@ -423,7 +427,10 @@ gitx release --base main --no-changelog --no-pr
 <span class="c"># Custom changelog path</span>
 gitx release --base main --changelog docs/CHANGELOG.md
 
-<span class="c"># --base is always required</span>
+<span class="c"># Base the release on a version tag: uses every commit after the tag up to the latest commit</span>
+gitx release --tag v1.2.3
+
+<span class="c"># --base or --tag is required (mutually exclusive)</span>
 gitx release --base main</pre>
 </section>
 

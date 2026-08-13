@@ -291,7 +291,7 @@ gitx changelog --output CHANGELOG.md       # Write to file
 
 ### `gitx release`
 
-Orchestrate the full release workflow: compare branches, generate changelog, bump versions, and create a PR description.
+Orchestrate the full release workflow: compare branches (or a version tag), generate changelog, bump versions, and create a PR description.
 
 ```bash
 gitx release --base main                          # Compare current branch against main
@@ -300,6 +300,9 @@ gitx release --base main --version v2.0.0         # Explicit version
 gitx release --base main --no-changelog           # Skip changelog generation
 gitx release --base main --no-version             # Skip version bumping
 gitx release --base main --no-pr                  # Skip PR description
+gitx release --tag v1.2.3                         # Base the release on a version tag
+# (--tag) uses every commit after the tag up to the latest commit
+# (--base) and (--tag) are mutually exclusive
 gitx release --changelog docs/CHANGELOG.md        # Custom changelog path
 ```
 
@@ -307,7 +310,8 @@ gitx release --changelog docs/CHANGELOG.md        # Custom changelog path
 
 | Flag | Description |
 |------|-------------|
-| `--base` | Base branch to compare against (required, e.g., `main`, `master`). |
+| `--base` | Base branch to compare against (e.g., `main`, `master`). Required unless `--tag` is used. |
+| `--tag` | Base version tag (e.g., `v1.2.3`): use all commits after this tag up to the latest commit. Required unless `--base` is used. |
 | `--version` | Explicit version string (e.g., `v1.2.3`). Skips AI suggestion. |
 | `--bump` | Version bump type: `major`, `minor`, or `patch`. AI-suggested if not set. |
 | `--changelog` | Path to changelog file (default `CHANGELOG.md`). |
