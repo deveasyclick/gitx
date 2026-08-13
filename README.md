@@ -300,8 +300,8 @@ gitx release --base main --version v2.0.0         # Explicit version
 gitx release --base main --no-changelog           # Skip changelog generation
 gitx release --base main --no-version             # Skip version bumping
 gitx release --base main --no-pr                  # Skip PR description
-gitx release --tag v1.2.3                         # Base the release on a version tag
-# (--tag) uses every commit after the tag up to the latest commit
+gitx release --tag                             # Base the release on the latest version tag
+# (--tag) uses every commit after the latest tag up to the latest commit
 # (--base) and (--tag) are mutually exclusive
 gitx release --changelog docs/CHANGELOG.md        # Custom changelog path
 ```
@@ -311,7 +311,7 @@ gitx release --changelog docs/CHANGELOG.md        # Custom changelog path
 | Flag | Description |
 |------|-------------|
 | `--base` | Base branch to compare against (e.g., `main`, `master`). Required unless `--tag` is used. |
-| `--tag` | Base version tag (e.g., `v1.2.3`): use all commits after this tag up to the latest commit. Required unless `--base` is used. |
+| `--tag` | Base the release on the latest version tag: use all commits after it up to the latest commit. Required unless `--base` is used. |
 | `--version` | Explicit version string (e.g., `v1.2.3`). Skips AI suggestion. |
 | `--bump` | Version bump type: `major`, `minor`, or `patch`. AI-suggested if not set. |
 | `--changelog` | Path to changelog file (default `CHANGELOG.md`). |
@@ -348,7 +348,7 @@ Once confirmed, the workflow proceeds through these steps:
 | **1. Version** | AI analyzes commits to suggest a version bump (major/minor/patch). User can accept, edit, or use `--version` to skip. |
 | **2. Branch** | Choose to release on the current branch or create a `release/vX.Y.Z` branch. |
 | **3. Changelog** | AI generates categorized changelog sections (Added, Fixed, Changed, Removed). Interactive loop: Accept / Regenerate / Copy / Edit. Written to `CHANGELOG.md`. |
-| **4. Version bump** | Updates `version` in `package.json` and `package-lock.json` (when present). |
+| **4. Version bump** | Updates `version` in `package.json` and `package-lock.json` (when present) — including the root package entry in `package-lock.json`, while leaving dependency versions untouched. |
 | **5. PR description** | Optional — asks whether to generate. If yes, AI generates a full PR description with summary, changelog, testing notes, and checklist. Interactive loop: Accept / Copy / Edit. Use `--pr` to skip the prompt or `--no-pr` to skip entirely. |
 | **6. Instructions** | Prints `git checkout -b`, `git commit`, and `git tag` commands to complete the release. |
 

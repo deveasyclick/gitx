@@ -324,13 +324,13 @@ gitx release --base main --bump major
 <span class="c"># Explicit version, skip changelog</span>
 gitx release --base main --version v2.0.0 --no-changelog
 
-<span class="c"># Base the release on a version tag: all commits after the tag up to the latest commit</span>
-gitx release --tag v1.2.3</pre>
+<span class="c"># Base the release on the latest version tag</span>
+gitx release --tag</pre>
 
   <table>
     <tr><th>Flag</th><th>Description</th></tr>
     <tr><td><code>--base</code></td><td>Base branch to compare against (e.g., main, master). Required unless <code>--tag</code> is used.</td></tr>
-    <tr><td><code>--tag</code></td><td>Base version tag (e.g., v1.2.3): use all commits after this tag up to the latest commit. Required unless <code>--base</code> is used.</td></tr>
+    <tr><td><code>--tag</code></td><td>Base the release on the latest version tag: use all commits after it up to the latest commit. Required unless <code>--base</code> is used.</td></tr>
     <tr><td><code>--version</code></td><td>Explicit version string (e.g., v1.2.3). Skips AI suggestion.</td></tr>
     <tr><td><code>--bump</code></td><td>Version bump type: major, minor, or patch. AI-suggested if not set.</td></tr>
     <tr><td><code>--changelog</code></td><td>Path to changelog file (default CHANGELOG.md).</td></tr>
@@ -427,8 +427,8 @@ gitx release --base main --no-changelog --no-pr
 <span class="c"># Custom changelog path</span>
 gitx release --base main --changelog docs/CHANGELOG.md
 
-<span class="c"># Base the release on a version tag: uses every commit after the tag up to the latest commit</span>
-gitx release --tag v1.2.3
+<span class="c"># Base the release on the latest version tag</span>
+gitx release --tag
 
 <span class="c"># --base or --tag is required (mutually exclusive)</span>
 gitx release --base main</pre>
