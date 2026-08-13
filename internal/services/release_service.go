@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/user/gitx/internal/ai"
@@ -99,6 +100,56 @@ func (s *ReleaseService) CompareBranches(ctx context.Context, base, head string)
 		NextVersion:    nextVersion,
 		LatestTag:      latestTag,
 		Commits:        commitSummaries,
+		Diff:           diff,
+	}
+
+	return &CompareResult{
+		Info: info,
+		Diff: diff,
+	}, nil
+}
+
+// CompareWithTag compares the current branch against a base version tag. It
+// returns every commit after the tag up to the latest commit (the tip of the
+// current branch) plus the cumulative diff since the tag.
+func (s *ReleaseService) CompareWithTag(ctx context.Context, tag string) (*CompareResult, error) {
+	if tag == "" {
+		return nil, fmt.Errorf("base tag is required")
+	}
+
+	repoInfo, err := s.git.RepoInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("repo info: %w", err)
+	}
+	head := repoInfo.CurrentBranch
+	if head == "" {
+		head = "HEAD"
+	}
+
+	// Commits after the tag, up to the latest commit.
+	logs, err := s.git.Log(ctx, tag, head)
+	if err != nil {
+		return nil, fmt.Errorf("comparing %s..%s (is %q a valid tag?): %w", tag, head, tag, err)
+	}
+
+	// Cumulative diff between the tag and the latest commit.
+	diff, err := s.git.DiffRange(ctx, tag, head)
+	if err != nil {
+		// If the diff fails, still proceed with just log info.
+		diff = domain.Change{}
+	}
+
+	// The explicitly requested tag is the base for this release, so it also
+	// drives the version range and the next-version suggestion.
+	nextVersion := SuggestNextVersion(tag, "minor")
+
+	info := domain.ReleaseInfo{
+		BaseBranch:     tag,
+		HeadBranch:     head,
+		CurrentVersion: tag,
+		NextVersion:    nextVersion,
+		LatestTag:      tag,
+		Commits:        toCommitSummaries(logs),
 		Diff:           diff,
 	}
 
@@ -221,7 +272,9 @@ func (s *ReleaseService) GeneratePRDescription(ctx context.Context, info domain.
 	return strings.TrimSpace(resp.Text), nil
 }
 
-// UpdateChangelogFile prepends or creates a CHANGELOG.md with the new entry.
+// UpdateChangelogFile inserts or creates a CHANGELOG.md entry.
+// The new entry is placed so the file keeps its existing version order
+// (either newest-first or oldest-first, detected from the current entries).
 // If an entry for the same version already exists (e.g. because the release
 // command was run more than once), it is replaced in place instead of being
 // duplicated.
@@ -233,7 +286,7 @@ func (s *ReleaseService) UpdateChangelogFile(changelogPath string, version strin
 
 	header := "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n"
 	// Normalize the entry: "## <version>\n\n<entry>\n"
-	entryBlock := fmt.Sprintf("## %s\n\n%s\n", version, strings.TrimSpace(newEntry))
+	entryBlock := fmt.Sprintf("## %s\n\n%s\n", version, formatChangelogEntry(newEntry))
 
 	// Check if file exists
 	existing, err := os.ReadFile(changelogPath)
@@ -253,29 +306,221 @@ func (s *ReleaseService) UpdateChangelogFile(changelogPath string, version strin
 		return os.WriteFile(changelogPath, []byte(updated), 0o644)
 	}
 
-	// File exists without an entry for this version — prepend after the header.
+	// File exists without an entry for this version — insert it in the
+	// position that keeps the file's existing version order.
 	var content string
 	if strings.HasPrefix(text, "# Changelog") {
-		// Find the first ## or end of file after header
-		headerEnd := strings.Index(text, "\n## ")
-		if headerEnd < 0 {
-			// No existing entries — insert after the header block
-			lines := strings.SplitN(text, "\n", 4)
-			if len(lines) >= 3 {
-				content = lines[0] + "\n" + lines[1] + "\n" + lines[2] + "\n\n" + entryBlock + strings.Join(lines[3:], "\n")
-			} else {
-				content = text + "\n" + entryBlock
-			}
-		} else {
-			// Insert after header but before first existing entry
-			content = text[:headerEnd] + "\n" + entryBlock + text[headerEnd:]
-		}
+		content = insertChangelogEntry(text, version, entryBlock)
 	} else {
-		// No standard header — just prepend
+		// No standard header — add it and the entry.
 		content = header + entryBlock + "\n" + text
 	}
 
 	return os.WriteFile(changelogPath, []byte(content), 0o644)
+}
+
+// versionHeadingRe matches "## v1.2.3" (or "## 1.2.3") section headers.
+var versionHeadingRe = regexp.MustCompile(`(?m)^##\s+(v?\d+\.\d+\.\d+[^\s]*)\s*$`)
+
+// insertChangelogEntry inserts entryBlock into text at the position that
+// preserves the file's existing version order. The order convention
+// (newest-first vs oldest-first) is detected from the entries already present;
+// with fewer than two entries the new entry is prepended after the header.
+func insertChangelogEntry(text, version, entryBlock string) string {
+	type heading struct {
+		version string
+		start   int
+	}
+	var headings []heading
+	for _, m := range versionHeadingRe.FindAllStringSubmatchIndex(text, -1) {
+		headings = append(headings, heading{
+			version: text[m[2]:m[3]],
+			start:   m[0],
+		})
+	}
+
+	if len(headings) < 2 {
+		// Too few entries to detect order — prepend after the header block.
+		return prependChangelogEntry(text, entryBlock)
+	}
+
+	// Detect order: ascending (oldest first) when the first entry is older
+	// than the second; otherwise newest-first.
+	ascending := compareVersions(headings[0].version, headings[1].version) < 0
+
+	// Find the first heading the new entry sorts before.
+	insertAt := len(headings)
+	for i, h := range headings {
+		cmp := compareVersions(h.version, version)
+		if (ascending && cmp > 0) || (!ascending && cmp < 0) {
+			insertAt = i
+			break
+		}
+	}
+
+	if insertAt == len(headings) {
+		// New version sorts after every existing entry — append at the end.
+		return strings.TrimRight(text, "\n") + "\n\n" + entryBlock
+	}
+
+	pos := headings[insertAt].start
+	return text[:pos] + entryBlock + "\n" + text[pos:]
+}
+
+// prependChangelogEntry inserts entryBlock right after the header block, i.e.
+// before the first "## " heading (or at the end when there is none).
+func prependChangelogEntry(text, entryBlock string) string {
+	// Find the first ## or end of file after header
+	headerEnd := strings.Index(text, "\n## ")
+	if headerEnd < 0 {
+		// No existing entries — insert after the header block
+		lines := strings.SplitN(text, "\n", 4)
+		if len(lines) >= 3 {
+			return lines[0] + "\n" + lines[1] + "\n" + lines[2] + "\n\n" + entryBlock + strings.Join(lines[3:], "\n")
+		}
+		return text + "\n" + entryBlock
+	}
+	// Insert after header but before first existing entry
+	return text[:headerEnd] + "\n" + entryBlock + text[headerEnd:]
+}
+
+// compareVersions compares two version strings such as "v1.2.3" or "1.2.3",
+// returning -1, 0, or 1. Non-semver strings fall back to lexical comparison.
+func compareVersions(a, b string) int {
+	amaj, amin, apat, aok := parseSemver(a)
+	bmaj, bmin, bpat, bok := parseSemver(b)
+	if !aok || !bok {
+		return strings.Compare(a, b)
+	}
+	if amaj != bmaj {
+		return sign(amaj - bmaj)
+	}
+	if amin != bmin {
+		return sign(amin - bmin)
+	}
+	if apat != bpat {
+		return sign(apat - bpat)
+	}
+	return 0
+}
+
+func sign(n int) int {
+	switch {
+	case n < 0:
+		return -1
+	case n > 0:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// parseSemver parses "v1.2.3" (or "1.2.3", optionally with a prerelease or
+// build suffix) into its numeric parts.
+func parseSemver(v string) (major, minor, patch int, ok bool) {
+	v = strings.TrimPrefix(v, "v")
+	// Strip prerelease/build suffix (e.g. "-beta.1" or "+build").
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		v = v[:i]
+	}
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return 0, 0, 0, false
+	}
+	nums := make([]int, 3)
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return 0, 0, 0, false
+		}
+		nums[i] = n
+	}
+	return nums[0], nums[1], nums[2], true
+}
+
+// formatChangelogEntry normalizes a changelog entry so it satisfies common
+// markdownlint rules (MD022 headings-surrounded-by-blank-lines, MD032
+// lists-surrounded-by-blank-lines): each heading and each list block is
+// separated from surrounding content by exactly one blank line, and the
+// result ends with a single trailing newline.
+func formatChangelogEntry(entry string) string {
+	lines := strings.Split(strings.ReplaceAll(entry, "\r\n", "\n"), "\n")
+
+	var out []string
+	var block []string
+	prevKind := kindOther
+	flush := func() {
+		if len(block) > 0 {
+			out = append(out, strings.Join(block, "\n"))
+			block = nil
+		}
+	}
+
+	for _, raw := range lines {
+		line := strings.TrimRight(raw, " \t")
+		if strings.TrimSpace(line) == "" {
+			flush()
+			prevKind = kindOther
+			continue
+		}
+		kind := classifyChangelogLine(line)
+		// Each heading starts its own block (MD022: headings need blank lines
+		// on both sides); list items group into one block.
+		if len(block) > 0 && (kind != prevKind || kind == kindHeading) {
+			flush()
+		}
+		if len(block) == 0 {
+			// Start a new block; separate it from the previous block with a
+			// blank line when needed (headings and lists both require one).
+			if len(out) > 0 {
+				out = append(out, "")
+			}
+		}
+		block = append(block, line)
+		prevKind = kind
+	}
+	flush()
+
+	// Collapse the trailing blank line inserted between the last two blocks.
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
+	}
+
+	return strings.Join(out, "\n")
+}
+
+type changelogLineKind int
+
+const (
+	kindOther changelogLineKind = iota
+	kindHeading
+	kindList
+)
+
+// classifyChangelogLine groups a line into heading, list item, or other.
+func classifyChangelogLine(line string) changelogLineKind {
+	trimmed := strings.TrimSpace(line)
+	switch {
+	case strings.HasPrefix(trimmed, "#"):
+		return kindHeading
+	case strings.HasPrefix(trimmed, "- "), strings.HasPrefix(trimmed, "* "),
+		strings.HasPrefix(trimmed, "+ "), isNumberedListItem(trimmed):
+		return kindList
+	default:
+		return kindOther
+	}
+}
+
+// isNumberedListItem reports whether s looks like "1. item" or "1) item".
+func isNumberedListItem(s string) bool {
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == 0 || i >= len(s) {
+		return false
+	}
+	return (s[i] == '.' || s[i] == ')') && i+1 < len(s) && s[i+1] == ' '
 }
 
 // replaceChangelogEntry finds every existing "## <version>" section in text
@@ -349,17 +594,29 @@ func (s *ReleaseService) BumpVersionInFiles(version string) ([]string, error) {
 	return modified, nil
 }
 
-// bumpJSONVersion reads a JSON file, updates the "version" field, and writes it back.
+// bumpJSONVersion reads a JSON file, updates only the top-level "version"
+// field, and writes it back. Nested objects (e.g. every dependency in
+// package-lock.json) keep their own versions untouched.
 func bumpJSONVersion(path, version string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	// Simple regex-based version replacement to avoid importing a JSON library
-	// Match "version": "anything" and replace
+	// The top-level "version" field is the first occurrence of the key at the
+	// root of the document. Replace only that one; nested "version" fields
+	// (package-lock.json dependencies) must stay as they are.
 	re := regexp.MustCompile(`"version"\s*:\s*"[^"]+"`)
-	newData := re.ReplaceAll(data, []byte(fmt.Sprintf(`"version": "%s"`, version)))
+	loc := re.FindIndex(data)
+	if loc == nil {
+		return fmt.Errorf("no version field found in %s", path)
+	}
+
+	replacement := []byte(fmt.Sprintf(`"version": "%s"`, version))
+	newData := make([]byte, 0, len(data))
+	newData = append(newData, data[:loc[0]]...)
+	newData = append(newData, replacement...)
+	newData = append(newData, data[loc[1]:]...)
 
 	if string(data) == string(newData) {
 		return fmt.Errorf("no version field found in %s", path)

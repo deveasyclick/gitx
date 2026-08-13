@@ -69,17 +69,30 @@ func (r *releaseRunner) run() error {
 	return nil
 }
 
-// compareAndShow resolves the base branch, compares it against the current
-// branch, and prints the comparison (steps 1-3).
+// compareAndShow resolves the base (a branch or a version tag), compares it
+// against the current branch, and prints the comparison (steps 1-3).
 func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
-	if r.flags.base == "" {
-		ui.PrintError("--base is required")
-		return domain.ReleaseInfo{}, fmt.Errorf("release: --base is required (e.g., --base main)")
+	tagBase := r.flags.tag
+	if tagBase != "" && r.flags.base != "" {
+		ui.PrintError("--base and --tag are mutually exclusive")
+		return domain.ReleaseInfo{}, fmt.Errorf("release: use either --base or --tag, not both")
+	}
+	if tagBase == "" && r.flags.base == "" {
+		ui.PrintError("--base (branch) or --tag (version tag) is required")
+		return domain.ReleaseInfo{}, fmt.Errorf("release: --base or --tag is required (e.g., --base main or --tag v1.2.3)")
 	}
 
-	ui.PrintInfo("🔍 Comparing branches...")
-
-	result, err := r.svc.CompareBranches(r.cmd.Context(), r.flags.base, "")
+	var (
+		result *services.CompareResult
+		err    error
+	)
+	if tagBase != "" {
+		ui.PrintInfo(fmt.Sprintf("🔍 Comparing against tag %s...", tagBase))
+		result, err = r.svc.CompareWithTag(r.cmd.Context(), tagBase)
+	} else {
+		ui.PrintInfo("🔍 Comparing branches...")
+		result, err = r.svc.CompareBranches(r.cmd.Context(), r.flags.base, "")
+	}
 	if err != nil {
 		ui.PrintError(err.Error())
 		return domain.ReleaseInfo{}, fmt.Errorf("compare")
@@ -90,9 +103,15 @@ func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
 	fmt.Println()
 	ui.PrintInfo("📦 Release Comparison")
 	fmt.Println()
-	fmt.Printf("  Base branch:  %s\n", info.BaseBranch)
-	fmt.Printf("  Head branch:  %s\n", info.HeadBranch)
-	fmt.Printf("  Commits:      %d commit(s) ahead\n", len(info.Commits))
+	if tagBase != "" {
+		fmt.Printf("  Base tag:    %s\n", info.BaseBranch)
+		fmt.Printf("  Head branch: %s\n", info.HeadBranch)
+		fmt.Printf("  Commits:     %d commit(s) since tag\n", len(info.Commits))
+	} else {
+		fmt.Printf("  Base branch:  %s\n", info.BaseBranch)
+		fmt.Printf("  Head branch:  %s\n", info.HeadBranch)
+		fmt.Printf("  Commits:      %d commit(s) ahead\n", len(info.Commits))
+	}
 	if info.Diff.DiffStat != "" {
 		fmt.Printf("  Changes:      %s\n", info.Diff.DiffStat)
 	} else {
@@ -101,7 +120,11 @@ func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
 
 	if len(info.Commits) > 0 {
 		fmt.Println()
-		ui.PrintInfo("Commits in head not in base:")
+		if tagBase != "" {
+			ui.PrintInfo("Commits since tag:")
+		} else {
+			ui.PrintInfo("Commits in head not in base:")
+		}
 		maxShow := 20
 		for i, c := range info.Commits {
 			if i >= maxShow {
@@ -118,7 +141,7 @@ func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
 
 	if len(info.Commits) == 0 && info.Diff.IsEmpty() {
 		fmt.Println()
-		ui.PrintInfo("✨ Nothing to release — head branch is up to date with base.")
+		ui.PrintInfo("✨ Nothing to release — no commits or changes since the base.")
 		return domain.ReleaseInfo{}, errNothingToRelease
 	}
 

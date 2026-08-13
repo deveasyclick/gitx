@@ -110,7 +110,7 @@ func writeSection(b *strings.Builder, name string, items []string) {
 	if len(items) == 0 {
 		return
 	}
-	fmt.Fprintf(b, "### %s\n", name)
+	fmt.Fprintf(b, "### %s\n\n", name)
 	for _, item := range items {
 		fmt.Fprintf(b, "- %s\n", item)
 	}
