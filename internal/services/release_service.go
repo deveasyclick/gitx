@@ -112,9 +112,14 @@ func (s *ReleaseService) CompareBranches(ctx context.Context, base, head string)
 // CompareWithTag compares the current branch against a base version tag. It
 // returns every commit after the tag up to the latest commit (the tip of the
 // current branch) plus the cumulative diff since the tag.
+// When tag is empty (or the sentinel "latest"), the newest tag is used.
 func (s *ReleaseService) CompareWithTag(ctx context.Context, tag string) (*CompareResult, error) {
-	if tag == "" {
-		return nil, fmt.Errorf("base tag is required")
+	if tag == "" || tag == "latest" {
+		tags, err := s.git.Tags(ctx)
+		if err != nil || len(tags) == 0 {
+			return nil, fmt.Errorf("no version tags found — cannot use the latest tag (specify --tag <version> or use --base <branch>)")
+		}
+		tag = tags[0]
 	}
 
 	repoInfo, err := s.git.RepoInfo(ctx)
@@ -585,7 +590,7 @@ func (s *ReleaseService) BumpVersionInFiles(version string) ([]string, error) {
 
 	// package-lock.json
 	if _, err := os.Stat("package-lock.json"); err == nil {
-		if err := bumpJSONVersion("package-lock.json", version); err != nil {
+		if err := bumpPackageLock("package-lock.json", version); err != nil {
 			return modified, fmt.Errorf("bumping package-lock.json: %w", err)
 		}
 		modified = append(modified, "package-lock.json")
@@ -621,6 +626,47 @@ func bumpJSONVersion(path, version string) error {
 	if string(data) == string(newData) {
 		return fmt.Errorf("no version field found in %s", path)
 	}
+
+	return os.WriteFile(path, newData, 0o644)
+}
+
+// bumpPackageLock updates the versions in a package-lock.json that mirror the
+// app version: the top-level "version" field and the root package entry inside
+// "packages" (the "" key, lockfile v2/v3). Every dependency entry under
+// "node_modules/*" keeps its own version untouched.
+func bumpPackageLock(path, version string) error {
+	// Top-level "version" (first occurrence at the root of the document).
+	if err := bumpJSONVersion(path, version); err != nil {
+		return err
+	}
+
+	// Root package entry: "packages": { "": { ... "version": ... } }.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	// Anchor at the start of the root entry object, then bump the first
+	// "version" key inside it regardless of key order.
+	rootRe := regexp.MustCompile(`"packages"\s*:\s*\{\s*"":\s*\{`)
+	rootLoc := rootRe.FindIndex(data)
+	if rootLoc == nil {
+		return nil // no root package entry — nothing more to update
+	}
+
+	verRe := regexp.MustCompile(`"version"\s*:\s*"[^"]+"`)
+	rel := rootLoc[1]
+	verLoc := verRe.FindIndex(data[rel:])
+	if verLoc == nil {
+		return nil
+	}
+
+	start, end := rel+verLoc[0], rel+verLoc[1]
+	replacement := []byte(fmt.Sprintf(`"version": "%s"`, version))
+	newData := make([]byte, 0, len(data))
+	newData = append(newData, data[:start]...)
+	newData = append(newData, replacement...)
+	newData = append(newData, data[end:]...)
 
 	return os.WriteFile(path, newData, 0o644)
 }

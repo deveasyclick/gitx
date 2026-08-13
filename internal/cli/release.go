@@ -14,7 +14,7 @@ import (
 
 type releaseFlags struct {
 	base        string
-	tag         string
+	tag         bool
 	version     string
 	bump        string
 	changelog   string // path to CHANGELOG.md (default: CHANGELOG.md)
@@ -30,24 +30,25 @@ func newReleaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "release",
 		Short: "Prepare and generate a release",
+		Args:  cobra.NoArgs,
 		Long: `Orchestrate a release workflow: compare branches (or a version tag),
 generate changelog, bump versions, and optionally create a PR description.
 
---base (a branch) or --tag (a version tag) is required. The workflow is
+--base (a branch) or --tag (the latest version tag) is required. The workflow is
 interactive: you review changes, choose version bumps, review AI-generated
 content, and decide what to do at every step (PR description generation
 asks first).
 
-With --tag, the release is based on the tag: every commit after the tag up
-to the latest commit is included, along with the cumulative diff since the
-tag.
+With --tag, the release is based on the latest version tag: every commit
+after that tag up to the latest commit is included, along with the cumulative
+diff since the tag.
 
 Examples:
   gitx release --base main
   gitx release --base main --bump major
   gitx release --base main --version v2.0.0 --no-changelog
-  gitx release --tag v1.2.3
-  gitx release --tag v1.2.3 --bump minor
+  gitx release --tag
+  gitx release --tag --bump minor
   gitx release --base main --pr`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return releaseRun(cmd, flags)
@@ -55,7 +56,7 @@ Examples:
 	}
 
 	cmd.Flags().StringVar(&flags.base, "base", "", "base branch (e.g., main, master)")
-	cmd.Flags().StringVar(&flags.tag, "tag", "", "base version tag (e.g., v1.2.3): use all commits after this tag up to the latest commit")
+	cmd.Flags().BoolVar(&flags.tag, "tag", false, "base the release on the latest version tag: use all commits after it up to the latest commit")
 	cmd.Flags().StringVar(&flags.version, "version", "", "explicit version (e.g., v1.2.3)")
 	cmd.Flags().StringVar(&flags.bump, "bump", "", "version bump type: major, minor, patch (AI-suggested if not set)")
 	cmd.Flags().StringVar(&flags.changelog, "changelog", "CHANGELOG.md", "path to changelog file")

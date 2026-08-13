@@ -69,26 +69,26 @@ func (r *releaseRunner) run() error {
 	return nil
 }
 
-// compareAndShow resolves the base (a branch or a version tag), compares it
-// against the current branch, and prints the comparison (steps 1-3).
+// compareAndShow resolves the base (a branch or the latest version tag),
+// compares it against the current branch, and prints the comparison
+// (steps 1-3).
 func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
-	tagBase := r.flags.tag
-	if tagBase != "" && r.flags.base != "" {
+	if r.flags.tag && r.flags.base != "" {
 		ui.PrintError("--base and --tag are mutually exclusive")
 		return domain.ReleaseInfo{}, fmt.Errorf("release: use either --base or --tag, not both")
 	}
-	if tagBase == "" && r.flags.base == "" {
-		ui.PrintError("--base (branch) or --tag (version tag) is required")
-		return domain.ReleaseInfo{}, fmt.Errorf("release: --base or --tag is required (e.g., --base main or --tag v1.2.3)")
+	if !r.flags.tag && r.flags.base == "" {
+		ui.PrintError("--base (branch) or --tag (latest version tag) is required")
+		return domain.ReleaseInfo{}, fmt.Errorf("release: --base or --tag is required (e.g., --base main or --tag)")
 	}
 
 	var (
 		result *services.CompareResult
 		err    error
 	)
-	if tagBase != "" {
-		ui.PrintInfo(fmt.Sprintf("🔍 Comparing against tag %s...", tagBase))
-		result, err = r.svc.CompareWithTag(r.cmd.Context(), tagBase)
+	if r.flags.tag {
+		ui.PrintInfo("🔍 Comparing against the latest tag...")
+		result, err = r.svc.CompareWithTag(r.cmd.Context(), "latest")
 	} else {
 		ui.PrintInfo("🔍 Comparing branches...")
 		result, err = r.svc.CompareBranches(r.cmd.Context(), r.flags.base, "")
@@ -103,7 +103,7 @@ func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
 	fmt.Println()
 	ui.PrintInfo("📦 Release Comparison")
 	fmt.Println()
-	if tagBase != "" {
+	if r.flags.tag {
 		fmt.Printf("  Base tag:    %s\n", info.BaseBranch)
 		fmt.Printf("  Head branch: %s\n", info.HeadBranch)
 		fmt.Printf("  Commits:     %d commit(s) since tag\n", len(info.Commits))
@@ -120,7 +120,7 @@ func (r *releaseRunner) compareAndShow() (domain.ReleaseInfo, error) {
 
 	if len(info.Commits) > 0 {
 		fmt.Println()
-		if tagBase != "" {
+		if r.flags.tag {
 			ui.PrintInfo("Commits since tag:")
 		} else {
 			ui.PrintInfo("Commits in head not in base:")

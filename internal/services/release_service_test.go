@@ -246,11 +246,68 @@ func TestReleaseService_CompareWithTag_InvalidTag(t *testing.T) {
 	}
 }
 
-func TestReleaseService_CompareWithTag_EmptyTag(t *testing.T) {
-	svc := NewReleaseService(&mockGit{}, &mockAI{}, prompts.NewReleaseBuilder())
+func TestReleaseService_CompareWithTag_UsesLatestTag(t *testing.T) {
+	// An empty tag (or the "latest" sentinel) resolves to the newest tag.
+	svc := NewReleaseService(
+		&mockGit{
+			repo: domain.RepoInfo{
+				CurrentBranch: "main",
+			},
+			log: []git.CommitLog{
+				{Hash: "aaa1111", Message: "feat: new feature"},
+				{Hash: "bbb2222", Message: "fix: bugfix"},
+			},
+			diff: domain.Change{
+				Files:    []string{"a.go"},
+				DiffStat: "1 file changed, 10 insertions(+)",
+			},
+			tags: []string{"v2.0.0", "v1.1.0", "v1.0.0"},
+		},
+		&mockAI{},
+		prompts.NewReleaseBuilder(),
+	)
 
-	if _, err := svc.CompareWithTag(context.Background(), ""); err == nil {
-		t.Fatal("expected error for empty tag")
+	for _, tag := range []string{"", "latest"} {
+		result, err := svc.CompareWithTag(context.Background(), tag)
+		if err != nil {
+			t.Fatalf("CompareWithTag(%q): %v", tag, err)
+		}
+		info := result.Info
+		if info.BaseBranch != "v2.0.0" {
+			t.Errorf("CompareWithTag(%q): BaseBranch = %q, want %q", tag, info.BaseBranch, "v2.0.0")
+		}
+		if info.CurrentVersion != "v2.0.0" {
+			t.Errorf("CompareWithTag(%q): CurrentVersion = %q, want %q", tag, info.CurrentVersion, "v2.0.0")
+		}
+		if info.NextVersion != "v2.1.0" {
+			t.Errorf("CompareWithTag(%q): NextVersion = %q, want %q", tag, info.NextVersion, "v2.1.0")
+		}
+		if len(info.Commits) != 2 {
+			t.Errorf("CompareWithTag(%q): expected 2 commits, got %d", tag, len(info.Commits))
+		}
+		if m := svc.git.(*mockGit); m.logFrom != "v2.0.0" {
+			t.Errorf("CompareWithTag(%q): Log from = %q, want %q", tag, m.logFrom, "v2.0.0")
+		}
+	}
+}
+
+func TestReleaseService_CompareWithTag_NoTags(t *testing.T) {
+	svc := NewReleaseService(
+		&mockGit{
+			repo: domain.RepoInfo{
+				CurrentBranch: "main",
+			},
+		},
+		&mockAI{},
+		prompts.NewReleaseBuilder(),
+	)
+
+	_, err := svc.CompareWithTag(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error when no tags exist")
+	}
+	if !strings.Contains(err.Error(), "no version tags found") {
+		t.Errorf("error should explain the missing tag, got: %v", err)
 	}
 }
 
@@ -811,7 +868,7 @@ func TestUpdateChangelogFile_FormatsEntryMarkdown(t *testing.T) {
 	}
 }
 
-func TestBumpVersionInFiles_PackageLock_OnlyTopLevel(t *testing.T) {
+func TestBumpVersionInFiles_PackageLock_TopLevelAndRootPackage(t *testing.T) {
 	svc := NewReleaseService(nil, nil, prompts.NewReleaseBuilder())
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
@@ -859,9 +916,14 @@ func TestBumpVersionInFiles_PackageLock_OnlyTopLevel(t *testing.T) {
 	}
 	content := string(data)
 
-	// Top-level version must be bumped...
+	// The top-level version must be bumped...
 	if !strings.Contains(content, "\"version\": \"2.0.0\",\n  \"lockfileVersion\"") {
 		t.Errorf("top-level version should be 2.0.0, got:\n%s", content)
+	}
+	// ...and so must the root package entry inside "packages" (key ""),
+	// which mirrors the app version.
+	if !strings.Contains(content, "\"\": {\n      \"name\": \"my-app\",\n      \"version\": \"2.0.0\"") {
+		t.Errorf("root package entry version should be 2.0.0, got:\n%s", content)
 	}
 	// ...but nested dependency versions must stay untouched.
 	if !strings.Contains(content, "\"node_modules/lodash\": {\n      \"version\": \"4.17.21\"") {
@@ -870,7 +932,55 @@ func TestBumpVersionInFiles_PackageLock_OnlyTopLevel(t *testing.T) {
 	if !strings.Contains(content, "\"node_modules/react\": {\n      \"version\": \"18.2.0\"") {
 		t.Errorf("react version should stay 18.2.0, got:\n%s", content)
 	}
-	// The root package entry inside "packages" keeps its own version too.
+	// Exactly the two version fields mirroring the app version are bumped.
+	if strings.Count(content, "\"version\": \"2.0.0\"") != 2 {
+		t.Errorf("expected exactly 2 bumped versions (top-level + root package entry), got:\n%s", content)
+	}
+}
+
+func TestBumpVersionInFiles_PackageLock_Version1NoPackages(t *testing.T) {
+	// Lockfile v1 has no "packages" root entry — only the top-level version
+	// is bumped and dependencies stay untouched.
+	svc := NewReleaseService(nil, nil, prompts.NewReleaseBuilder())
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+
+	lockJSON := `{
+  "name": "my-app",
+  "version": "1.0.0",
+  "lockfileVersion": 1,
+  "dependencies": {
+    "lodash": {
+      "version": "4.17.21"
+    }
+  }
+}`
+	if err := os.WriteFile("package-lock.json", []byte(lockJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if _, err := svc.BumpVersionInFiles("v2.0.0"); err != nil {
+		t.Fatalf("BumpVersionInFiles: %v", err)
+	}
+
+	data, err := os.ReadFile("package-lock.json")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "\"version\": \"2.0.0\",\n  \"lockfileVersion\"") {
+		t.Errorf("top-level version should be 2.0.0, got:\n%s", content)
+	}
+	if !strings.Contains(content, "\"lodash\": {\n      \"version\": \"4.17.21\"") {
+		t.Errorf("lodash version should stay 4.17.21, got:\n%s", content)
+	}
 	if strings.Count(content, "\"version\": \"2.0.0\"") != 1 {
 		t.Errorf("only the top-level version should be 2.0.0, got:\n%s", content)
 	}
