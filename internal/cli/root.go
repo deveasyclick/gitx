@@ -117,7 +117,7 @@ func maybeCheckForUpdates() {
 	}
 
 	_, _ = fmt.Fprintf(ui.Stderr, "\n⚠️  A new version of gitx is available: %s (you have %s)\n", latest, currentVersion)
-	_, _ = fmt.Fprintf(ui.Stderr, "    Update: curl -fsSL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh\n", gitxRepo)
+	_, _ = fmt.Fprintf(ui.Stderr, "    Update: gitx update\n")
 	_, _ = fmt.Fprintf(ui.Stderr, "    See:    https://github.com/%s/releases/tag/%s\n\n", gitxRepo, latest)
 }
 
