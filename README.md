@@ -4,6 +4,8 @@ GitX is an AI-powered command-line Git assistant that improves developer product
 
 **Git remains the source of truth.** GitX provides intelligence and automation around existing Git workflows — it never commits without approval, never pushes code, and never modifies source code without user permission.
 
+[Engineering notes](docs/engineering-notes.md) · [MIT license](LICENSE)
+
 ## Features
 
 - **`gitx commit`** — Generate commit messages from staged or unstaged changes with interactive confirmation
